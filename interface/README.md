@@ -1,0 +1,1 @@
+interface模块负责将整个fairy对外暴露出来，目前包括了cli与web ui这两种途径。

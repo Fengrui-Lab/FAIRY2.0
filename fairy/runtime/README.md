@@ -1,0 +1,1 @@
+runtime模块负责实现整体的运行时逻辑，是acps与agents之间的桥梁，核心思路就是：everything is event；智能体的操作是事件，acps的反馈也是事件，通过事件我们串联起整个结构。
