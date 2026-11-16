@@ -1,0 +1,52 @@
+{
+  "scenario": "soybean_l3_hn58_waterlimit_v1",
+  "fairy_version": "0.4.0",
+  "runtime_schema": 3,
+  "backend": "native",
+  "physical_backend": "native",
+  "model": "Qwen3.6-35B-A3B-FP8",
+  "base_url": "http://100.115.106.71:8000/v1",
+  "temperature": 0.1,
+  "thinking": false,
+  "max_steps": 400,
+  "max_errors": 30,
+  "history_turns": 20,
+  "max_context_chars": 60000,
+  "max_output_tokens": 2048,
+  "request_timeout_seconds": 240,
+  "wall_budget_seconds": 3600,
+  "assistance": "task and public successful-tool progress; no detail/library/Oracle trace",
+  "full_season_run_adapter": "chat_tools_v3",
+  "current_adapter": "chat_tools_v4",
+  "adapter_difference": "v4 additionally rejects truncated/filtered tool responses; same task, public context, prompt and normal tool-call path",
+  "current_adapter_service_probe": {
+    "finish_reason": "tool_calls",
+    "adapter": "chat_tools_v4",
+    "tool": "inspect_inventory",
+    "physical_operations_executed": 0
+  },
+  "full_run_adapter_source": {
+    "adapter": "chat_tools_v3",
+    "sha256": "6b4c0790dad7fef0c109751324aa4a10b21c17aded225a5745ac68707ab473dd",
+    "note": "Full-season public-progress run launched before the subsequent truncated-response rejection guard."
+  },
+  "weather_sha256": "b9fd613f15ef1e6a216b0c557968ef5f377ca853df1c0050f18d34e3c7d8a1b2",
+  "controller_stop": "task predicate checked before and after decisions; task_success termination",
+  "full_season_source_status": "physical task completed, then manually interrupted during repeated inventory calls; done=false",
+  "real_resume": {
+    "source": ".runs/new_l3_llm_checkpoint.json",
+    "through_event_seq": 627,
+    "adapter": "chat_tools_v4",
+    "max_steps": 50,
+    "max_errors": 10,
+    "wall_budget_seconds": 600,
+    "request_timeout_seconds": 240,
+    "history_turns": 20,
+    "max_context_chars": 60000,
+    "calls": 7,
+    "termination": "task_success",
+    "artifact": ".runs/new_l3_llm_resumed.json",
+    "strict_replay": ".runs/new_l3_llm_resumed_replay.json",
+    "qualification": "real v3 prefix plus real v4 continuation, not a pure v4 full-season rollout"
+  }
+}

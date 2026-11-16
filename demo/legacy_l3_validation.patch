@@ -1,0 +1,666 @@
+diff --git a/fairy/agents/agent/agent.py b/fairy/agents/agent/agent.py
+index 8a5f340..395b30a 100644
+--- a/fairy/agents/agent/agent.py
++++ b/fairy/agents/agent/agent.py
+@@ -217,6 +217,7 @@ class Agent(BaseAgent):
+         if deferred_messages:
+             del self.messages.messages[message_count_before_tool:]
+ 
++        is_error = isinstance(tool_response, dict) and "error" in tool_response
+         # Add time prefix to tool response
+         env_time_after = self.time_manager.time()
+         env_ts = datetime.fromtimestamp(env_time_after, tz=CST).strftime(
+@@ -226,7 +227,7 @@ class Agent(BaseAgent):
+         if deferred_messages:
+             self.messages.messages.extend(deferred_messages)
+         self.workflow.add_node(WorkflowStep(
+-            op_type="TOOL",
++            op_type="TOOL_ERROR" if is_error else "TOOL",
+             tool_name=name,
+             tool_args=args,
+             content=tool_response,
+@@ -236,8 +237,8 @@ class Agent(BaseAgent):
+         )
+         )
+         self.record_event(
+-            "tool_call_end",
+-            status="ok",
++            "tool_call_error" if is_error else "tool_call_end",
++            status="error" if is_error else "ok",
+             tool_name=name,
+             tool_call_id=tool_call_id,
+             tool_type=tool_type,
+diff --git a/fairy/agents/agent/messages.py b/fairy/agents/agent/messages.py
+index 3ab6407..5ca2567 100644
+--- a/fairy/agents/agent/messages.py
++++ b/fairy/agents/agent/messages.py
+@@ -64,6 +64,7 @@ class Messages:
+         self.runtime_metrics.append({
+             "role": "tool",
+             "tool_call_id": tool_call.id,
++            "status": "error" if isinstance(tool_response, dict) and "error" in tool_response else "ok",
+             "time": elapsed_time,
+         })
+ 
+diff --git a/fairy/apps/app.py b/fairy/apps/app.py
+index f1fdc4f..c80a1a2 100644
+--- a/fairy/apps/app.py
++++ b/fairy/apps/app.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import hashlib
+ import inspect
+ import random
+ from enum import Enum, auto
+@@ -38,9 +39,15 @@ class App:
+ 
+     def set_seed(self, seed: int) -> None:
+         combined_seed = f"{seed}_{self.name}"
+-        self.seed = hash(combined_seed) % (2**32)
++        self.seed = int.from_bytes(hashlib.sha256(combined_seed.encode()).digest()[:4], "big")
++        self._operation_sequence = 0
+         self.rng = random.Random(self.seed)
+ 
++    def next_operation_id(self, kind: str) -> str:
++        """Run-local identity, independent of observation random streams."""
++        self._operation_sequence += 1
++        return f"{self.name}:{kind}:{self._operation_sequence:08d}"
++
+     def register_to_env(self, key: str, add_event: Callable[[Any], None]) -> None:
+         self.add_event_callbacks[key] = add_event
+ 
+@@ -70,6 +77,7 @@ class App:
+         pass
+ 
+     def reset(self) -> None:
++        self._operation_sequence = 0
+         self.rng = random.Random(self.seed)
+ 
+     def app_name(self) -> str:
+diff --git a/fairy/apps/farm_world/drone_app.py b/fairy/apps/farm_world/drone_app.py
+index ff571d6..19853cb 100644
+--- a/fairy/apps/farm_world/drone_app.py
++++ b/fairy/apps/farm_world/drone_app.py
+@@ -13,7 +13,6 @@ environment time.
+ 
+ from __future__ import annotations
+ 
+-import uuid
+ from typing import Any
+ 
+ from fairy.apps.app import App
+@@ -197,7 +196,7 @@ class DroneApp(App):
+ 
+         self.time_manager.add_offset(total_duration)
+ 
+-        mission_id = str(uuid.uuid4())[:8]
++        mission_id = self.next_operation_id("survey")
+         self._mission_log.append(
+             {
+                 "mission_id": mission_id,
+diff --git a/fairy/apps/farm_world/farm_world_app.py b/fairy/apps/farm_world/farm_world_app.py
+index 10582b8..917fd5b 100644
+--- a/fairy/apps/farm_world/farm_world_app.py
++++ b/fairy/apps/farm_world/farm_world_app.py
+@@ -923,7 +923,7 @@ class FarmWorldApp(App):
+ 
+             self.record_action(
+                 FarmActionRecord(
+-                    action_id=str(_uuid.uuid4())[:8],
++                    action_id=self.next_operation_id("action"),
+                     timestamp=float(self.time_manager.time()),
+                     actor_app=self.name,
+                     action_type="fertigation",
+@@ -1099,7 +1099,7 @@ class FarmWorldApp(App):
+ 
+             self.record_action(
+                 FarmActionRecord(
+-                    action_id=str(_uuid.uuid4())[:8],
++                    action_id=self.next_operation_id("action"),
+                     timestamp=float(self.time_manager.time()),
+                     actor_app=self.name,
+                     action_type="store_grain",
+diff --git a/fairy/apps/farm_world/field_ops_app.py b/fairy/apps/farm_world/field_ops_app.py
+index 31410c0..75fca8e 100644
+--- a/fairy/apps/farm_world/field_ops_app.py
++++ b/fairy/apps/farm_world/field_ops_app.py
+@@ -393,7 +393,7 @@ class FieldOpsApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="irrigation",
+@@ -447,7 +447,7 @@ class FieldOpsApp(App):
+         )
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="insecticide",
+diff --git a/fairy/apps/farm_world/robot_app.py b/fairy/apps/farm_world/robot_app.py
+index 436cb94..97db1bd 100644
+--- a/fairy/apps/farm_world/robot_app.py
++++ b/fairy/apps/farm_world/robot_app.py
+@@ -12,7 +12,6 @@ environment time.
+ 
+ from __future__ import annotations
+ 
+-import uuid
+ from typing import Any
+ 
+ from fairy.apps.app import App
+@@ -150,7 +149,7 @@ class RobotApp(App):
+         if wet_ground:
+             result["warning"] = "ground_wet, mobility_reduced"
+ 
+-        inspection_id = str(uuid.uuid4())[:8]
++        inspection_id = self.next_operation_id("inspection")
+         self._inspection_log.append(
+             {
+                 "inspection_id": inspection_id,
+@@ -461,7 +460,7 @@ class RobotApp(App):
+         }
+         if wet_ground:
+             result["warning"] = "ground_wet, mobility_reduced"
+-        inspection_id = str(uuid.uuid4())[:8]
++        inspection_id = self.next_operation_id("inspection")
+         self._inspection_log.append(
+             {
+                 "inspection_id": inspection_id,
+diff --git a/fairy/apps/farm_world/tractor_app.py b/fairy/apps/farm_world/tractor_app.py
+index ee2710e..d628e12 100644
+--- a/fairy/apps/farm_world/tractor_app.py
++++ b/fairy/apps/farm_world/tractor_app.py
+@@ -397,7 +397,7 @@ class TractorApp(App):
+         self._completed_prep_ops.append("level")
+         self._operation_log.append(
+             {
+-                "op_id": str(uuid.uuid4())[:8],
++                "op_id": self.next_operation_id("action"),
+                 "operation": "level",
+                 "implement": implement,
+                 "working_width_m": width_m,
+@@ -451,7 +451,7 @@ class TractorApp(App):
+ 
+         self._operation_log.append(
+             {
+-                "op_id": str(uuid.uuid4())[:8],
++                "op_id": self.next_operation_id("action"),
+                 "operation": "base_fertilize",
+                 "fertilizer_used_kg": _BASE_FERTILIZE_KG,
+                 "duration_s": duration,
+@@ -515,7 +515,7 @@ class TractorApp(App):
+         self._completed_prep_ops.append("form_ridges")
+         self._operation_log.append(
+             {
+-                "op_id": str(uuid.uuid4())[:8],
++                "op_id": self.next_operation_id("action"),
+                 "operation": "form_ridges",
+                 "ridge_width_m": ridge_width_m,
+                 "num_ridges": self._farm_world_app.num_ridges,
+@@ -598,7 +598,7 @@ class TractorApp(App):
+                 )
+             self._farm_world_app.is_state_modified = True
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -738,7 +738,7 @@ class TractorApp(App):
+             seed_spacing_cm=float(seed_spacing_cm),
+         )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -820,7 +820,7 @@ class TractorApp(App):
+             "insecticide", required_liters
+         )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -931,7 +931,7 @@ class TractorApp(App):
+             "insecticide", required_liters
+         )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1039,7 +1039,7 @@ class TractorApp(App):
+             "fungicide", required_liters
+         )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1120,7 +1120,7 @@ class TractorApp(App):
+         )
+         self._operation_log.append(
+             {
+-                "op_id": str(uuid.uuid4())[:8],
++                "op_id": self.next_operation_id("action"),
+                 "operation": "apply_herbicide",
+                 "ridge_ids": list(range(start_ridge, end_ridge + 1)),
+                 "herbicide_used_liters": required_liters,
+@@ -1186,7 +1186,7 @@ class TractorApp(App):
+         regime_status = self._farm_world_app.record_mechanical_weed_ridges(ridge_count)
+         self._operation_log.append(
+             {
+-                "op_id": str(uuid.uuid4())[:8],
++                "op_id": self.next_operation_id("action"),
+                 "operation": "mechanical_weed_control",
+                 "ridge_ids": list(range(start_ridge, end_ridge + 1)),
+                 "duration_s": duration,
+@@ -1316,7 +1316,7 @@ class TractorApp(App):
+ 
+             self._farm_world_app.record_action(
+                 FarmActionRecord(
+-                    action_id=str(uuid.uuid4())[:8],
++                    action_id=self.next_operation_id("action"),
+                     timestamp=float(self.time_manager.time()),
+                     actor_app=self.name,
+                     action_type="replanting",
+@@ -1357,7 +1357,7 @@ class TractorApp(App):
+                 seeds_planted=seeds_per_ridge,
+             )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1431,7 +1431,7 @@ class TractorApp(App):
+                 ridge_ids=list(range(start_ridge, end_ridge + 1)),
+             )
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1527,7 +1527,7 @@ class TractorApp(App):
+             grain_added = round(grain_added, 2)
+         self._grain_bin_kg = round(self._grain_bin_kg + grain_added, 2)
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1563,7 +1563,7 @@ class TractorApp(App):
+         self._farm_world_app.add_grain_to_inventory(unloaded)
+         self._grain_bin_kg = 0.0
+ 
+-        op_id = str(uuid.uuid4())[:8]
++        op_id = self.next_operation_id("action")
+         self._operation_log.append(
+             {
+                 "op_id": op_id,
+@@ -1686,7 +1686,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=now_t,
+                 actor_app=self.name,
+                 action_type="planting",
+@@ -1835,7 +1835,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="harvest",
+@@ -1875,7 +1875,7 @@ class TractorApp(App):
+             )
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="base_fertilizer",
+@@ -1922,7 +1922,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="fertigation",
+@@ -1975,7 +1975,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="fungicide",
+@@ -2039,7 +2039,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type=action_type,
+@@ -2078,7 +2078,7 @@ class TractorApp(App):
+             )
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="incorporate_residue",
+@@ -2128,7 +2128,7 @@ class TractorApp(App):
+ 
+         self._farm_world_app.record_action(
+             FarmActionRecord(
+-                action_id=str(uuid.uuid4())[:8],
++                action_id=self.next_operation_id("action"),
+                 timestamp=float(self.time_manager.time()),
+                 actor_app=self.name,
+                 action_type="insecticide",
+diff --git a/fairy/apps/system.py b/fairy/apps/system.py
+index ef70b4e..a9f5f46 100644
+--- a/fairy/apps/system.py
++++ b/fairy/apps/system.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ from dataclasses import dataclass, field
+ from datetime import datetime, timezone
++from zoneinfo import ZoneInfo
+ from typing import Callable
+ 
+ from fairy.apps.app import App
+@@ -43,7 +44,7 @@ class SystemApp(App):
+         "current_weekday" (Monday, Tuesday, etc.).
+         """
+         timestamp = self.time_manager.time()
+-        date = datetime.fromtimestamp(timestamp, tz=timezone.utc)
++        date = datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai"))
+         return {
+             "current_timestamp": timestamp,
+             "current_datetime": date.strftime("%Y-%m-%d %H:%M:%S"),
+@@ -111,7 +112,7 @@ class SystemApp(App):
+             "status": "ok",
+             "advanced_seconds": total_seconds,
+             "current_timestamp": timestamp,
+-            "current_datetime": datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
++            "current_datetime": datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai")).strftime(
+                 "%Y-%m-%d %H:%M:%S"
+             ),
+         }
+diff --git a/fairy/controllers/agent_builder.py b/fairy/controllers/agent_builder.py
+index 29696c5..6bca9b4 100644
+--- a/fairy/controllers/agent_builder.py
++++ b/fairy/controllers/agent_builder.py
+@@ -197,6 +197,8 @@ class ResearchARESimulationAgent(Agent):
+     def after_tool_response(self, tool_call: Any, tool_response: Any) -> None:
+         tool_name = tool_call.function.name
+         observation = str(tool_response)
++        if isinstance(tool_response, dict) and "error" in tool_response:
++            self.telemetry["error_count"] = int(self.telemetry["error_count"]) + 1
+         self.telemetry["tool_calls"] = int(self.telemetry["tool_calls"]) + 1
+         self._append_reflection(
+             f"After calling {tool_name}, verify outcome before continuing: {observation[:180]}"
+diff --git a/fairy/controllers/engine.py b/fairy/controllers/engine.py
+index 5fbdd2e..6f0fe78 100644
+--- a/fairy/controllers/engine.py
++++ b/fairy/controllers/engine.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import inspect
++import math
+ import time
+ from dataclasses import asdict, dataclass
+ from datetime import datetime, timedelta, timezone
+@@ -248,6 +249,9 @@ class Engine:
+         _, _, tools_map = build_toolset(list(self.scenario.apps or []))
+         replayed = Workflow()
+         for name, step in workflow.dag.items():
++            if not math.isfinite(step.wait_before_seconds) or step.wait_before_seconds < 0:
++                raise ValueError("Scheduled wait must be finite and nonnegative")
++            self.time_manager.add_offset(step.wait_before_seconds)
+             wall_start = time.perf_counter()
+             sim_time_before = self.time_manager.time()
+             if not step.tool_name:
+@@ -298,6 +302,10 @@ class Engine:
+                     tool_args=args,
+                     depends_on=list(step.depends_on),
+                     time=self._env_time_str(),
++                    time_before=sim_time_before,
++                    time_after=self.time_manager.time(),
++                    error_stage=step.error_stage,
++                    wait_before_seconds=step.wait_before_seconds,
+                 )
+             )
+             self._record_run_log(
+@@ -418,8 +426,14 @@ class Engine:
+     def _run_captured_oracle_events(self, run_oracle: bool = True) -> None:
+         captured_events = list(getattr(self.scenario, "events", []) or [])
+         events = self._oracle_event_dependency_closure(captured_events)
+-        event_times = self._captured_event_times(events)
++        planned_times = self._captured_event_times(events) if not run_oracle else {}
+         for event in events:
++            delay = float(getattr(event, "delay_seconds", 0.0) or 0.0)
++            if not math.isfinite(delay) or delay < 0:
++                raise ValueError("Scheduled wait must be finite and nonnegative")
++            if run_oracle:
++                self.time_manager.add_offset(delay)
++            time_before = self.time_manager.time()
+             content = event.execute() if run_oracle else None
+             name = event.event_id
+             app_name = getattr(event.app, "name", event.app.__class__.__name__)
+@@ -438,7 +452,10 @@ class Engine:
+                     tool_name=tool_name,
+                     tool_args=tool_args,
+                     depends_on=deps,
+-                    time=self._format_timestamp(event_times[id(event)]),
++                    time=self._env_time_str() if run_oracle else self._format_timestamp(planned_times[id(event)]),
++                    time_before=time_before if run_oracle else None,
++                    time_after=self.time_manager.time() if run_oracle else None,
++                    wait_before_seconds=delay,
+                 )
+             )
+ 
+diff --git a/fairy/controllers/run_artifacts.py b/fairy/controllers/run_artifacts.py
+index 0d96154..d4ad618 100644
+--- a/fairy/controllers/run_artifacts.py
++++ b/fairy/controllers/run_artifacts.py
+@@ -51,6 +51,7 @@ def metric_totals(metrics: list[dict[str, Any]]) -> dict[str, Any]:
+     return {
+         "llm_call_count": len(assistant),
+         "tool_metric_count": len(tools),
++        "tool_error_count": sum(entry.get("status") == "error" for entry in tools),
+         "llm_wall_time_seconds": round(sum(float(entry.get("time") or 0) for entry in assistant), 6),
+         "tool_wall_time_seconds": round(sum(float(entry.get("time") or 0) for entry in tools), 6),
+         "token_usage": token_usage_from_metrics(metrics),
+diff --git a/fairy/scenarios/scenario.py b/fairy/scenarios/scenario.py
+index 30f83ac..0d24dbd 100644
+--- a/fairy/scenarios/scenario.py
++++ b/fairy/scenarios/scenario.py
+@@ -58,6 +58,8 @@ class Scenario:
+             self.initiate_scenario(*args, **kwargs)
+         else:
+             self.init_and_populate_apps(*args, **kwargs)
++        for app in self.apps or []:
++            app.set_seed(self.seed)
+         if hasattr(self, "build_events_flow") and not self.events:
+             result = self.build_events_flow()
+             if result is not None and not self.events:
+diff --git a/fairy/scenarios/workflow.py b/fairy/scenarios/workflow.py
+index da39134..17189a4 100644
+--- a/fairy/scenarios/workflow.py
++++ b/fairy/scenarios/workflow.py
+@@ -18,6 +18,7 @@ class WorkflowStep:
+     time_before: float | None = None
+     time_after: float | None = None
+     error_stage: str | None = None
++    wait_before_seconds: float = 0.0
+ 
+     def to_dict(self) -> dict[str, Any]:
+         data = {
+@@ -29,6 +30,8 @@ class WorkflowStep:
+             "depends_on": self.depends_on,
+             "time": self.time,
+         }
++        if self.wait_before_seconds:
++            data["wait_before_seconds"] = self.wait_before_seconds
+         if self.time_before is not None:
+             data["time_before"] = self.time_before
+         if self.time_after is not None:
+diff --git a/fairy/time_manager.py b/fairy/time_manager.py
+index 8218438..0571e0e 100644
+--- a/fairy/time_manager.py
++++ b/fairy/time_manager.py
+@@ -2,7 +2,9 @@ import time
+ 
+ class TimeManager:
+     """
+-    A class for managing time in the simulation.
++    Explicit simulation clock; wall time is diagnostic only.
++
++    Tools and scheduling advance offset. Model latency never advances physics.
+     """
+ 
+     def __init__(self):
+@@ -35,7 +37,7 @@ class TimeManager:
+         """
+         if self.real_start_time is None:
+             raise Exception("real_start_time cannot be null")
+-        return self.real_time_passed() + self.offset
++        return self.offset
+ 
+     def real_time_passed(self) -> float:
+         """
+diff --git a/tests/test_l3_determinism.py b/tests/test_l3_determinism.py
+new file mode 100644
+index 0000000..e686126
+--- /dev/null
++++ b/tests/test_l3_determinism.py
+@@ -0,0 +1,100 @@
++"""Validation-copy regressions, independent of the new FAIRY L1 package."""
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++import time
++from copy import deepcopy
++
++from fairy.apps.app import App
++from fairy.controllers.engine import Engine
++from fairy.scenarios.registry import get_scenario_class
++from fairy.time_manager import TimeManager
++
++SCENARIO = "scenario_full_season_hb_dryr5r6_hn58_std_waterlimit"
++ROOT = Path(__file__).resolve().parents[1]
++
++
++def engine():
++    return Engine(agent=None, scenario=get_scenario_class(SCENARIO)())
++
++
++def test_clock_and_ids_do_not_consume_wall_time_or_randomness():
++    clock = TimeManager()
++    clock.reset(100)
++    time.sleep(0.02)
++    assert clock.time() == 100
++    clock.add_offset(43200)
++    clock.add_offset(43200)
++    assert clock.time() == 86500
++    a, b = App("probe"), App("probe")
++    first = a.next_operation_id("inspection")
++    assert first != a.next_operation_id("inspection")
++    assert a.rng.random() == b.rng.random()
++    a.reset()
++    assert a.next_operation_id("inspection") == first
++
++
++def test_oracle_replay_exact_and_recomputed():
++    original = engine()
++    source = original.build_oracle_workflow(run_oracle=True)
++    replay_engine = engine()
++    replay = replay_engine.replay_workflow(source)
++    assert source.to_dict() == replay.to_dict()
++    assert original.outcome_summary() == replay_engine.outcome_summary()
++    assert source.dag["briefing"].wait_before_seconds == 5
++    assert source.dag["briefing"].time_before == original.start_time + 5
++    # A forged observation/time is not copied into computed tool results.
++    tampered = deepcopy(source)
++    weather = tampered.dag["o_weather_before_prep"]
++    weather.content["temp_c"] = -999
++    weather.time_after += 1000
++    actual = engine().replay_workflow(tampered)
++    assert actual.to_dict() != tampered.to_dict()
++    assert actual.to_dict() == replay.to_dict()
++
++
++def test_cross_process_hash_seed_and_real_delays(tmp_path):
++    source = engine().build_oracle_workflow(run_oracle=True)
++    source_path = tmp_path / "source.json"
++    source.save_workflow(str(source_path))
++    code = '''
++import json, sys, time
++from fairy.controllers.engine import Engine
++from fairy.scenarios.registry import get_scenario_class
++from fairy.scenarios.workflow import Workflow
++from fairy.apps.app import App
++from fairy.tool_utils import AppTool
++delay=float(sys.argv[3])
++invoke=AppTool.__call__
++def delayed(self,*a,**kw):
++    time.sleep(delay)
++    return invoke(self,*a,**kw)
++AppTool.__call__=delayed
++e=Engine(agent=None,scenario=get_scenario_class(sys.argv[2])())
++w=e.replay_workflow(Workflow.load_workflow(sys.argv[1]))
++print(json.dumps({"workflow":w.to_dict(),"outcome":e.outcome_summary()}))
++'''
++    outputs = []
++    for hash_seed, delay in (("123", "0"), ("456", "0.01")):
++        raw = subprocess.check_output(
++            [sys.executable, "-c", code, str(source_path), SCENARIO, delay],
++            cwd=ROOT, env={**os.environ, "PYTHONHASHSEED": hash_seed}, text=True,
++        )
++        outputs.append(json.loads(raw))
++    assert outputs[0] == outputs[1]
++    assert outputs[0]["workflow"] == json.loads(source_path.read_text())
++
++
++def test_scenario_seed_is_effective():
++    observations = []
++    for seed in (7, 8, 7):
++        scenario = get_scenario_class(SCENARIO)(seed=seed)
++        e = Engine(agent=None, scenario=scenario)
++        scenario.setup()
++        e._register_scenario_apps()
++        sensor = next(a for a in scenario.apps if a.name == "SensorApp")
++        observations.append(sensor.read_soil_sensors())
++    assert observations[0] == observations[2]
++    assert observations[0] != observations[1]

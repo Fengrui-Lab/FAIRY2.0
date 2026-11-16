@@ -1,0 +1,33 @@
+{
+  "reference_commit": "59ceb7e7c02a728909d522dc4b5dda752a9fe1b3",
+  "supplementary_commit": "6da01b058a1504ef0b888cdc8c76bc92d0b8f793",
+  "source_sha256": {
+    "fairy/scenarios/farm_world_fullseason_v2/scenario_full_season_hb_dryr5r6_hn58_std_waterlimit.py": "78c95ff83802285da9e7037ec1d597b22867c80127f8ba6e31977bc9b5f950a1",
+    "fairy/scenarios/farm_world_fullseason_v2/harbin_l3_scenario_helpers.py": "508aa0fb37be55a6dfe172b8d51c9a649ade22a6be4936f16f9f3a518fc32fe2",
+    "fairy/physics/profiles.py": "65c7f9805b2471391e9a4c43beee7b43ae91866fe5d4e13b3752b94f8c885823",
+    "fairy/physics/weather_engine.py": "f06a52e0f54a2d5ed5a369b3bbe4af191efd77205404dde666b79bf6e50e022f",
+    "fairy/physics/phenology_engine.py": "295a5f88a759fbd66b0f7b2e0a16585abf7d399d988b0e9e0bf7f5592f9069f7",
+    "fairy/physics/canopy_biomass_engine.py": "5cba695420f67d0a05ef64f50e3420377d830a7da85338d8845762d50827c831",
+    "fairy/physics/yield_recovery_engine.py": "207c5abb979da0c75deaf62217ef2912718df96c1c14b12db54a947a7e1fc8a2"
+  },
+  "weather_sha256": "b9fd613f15ef1e6a216b0c557968ef5f377ca853df1c0050f18d34e3c7d8a1b2",
+  "weather_generator_seed": 1202,
+  "weather_days": 171,
+  "implementation": "rewritten reduced process; no runtime reference dependency",
+  "calibration": "none",
+  "weather_profile": "harbin_hb_dryr5r6_hn58_waterlimit_seed_1202",
+  "weather_date_range": [
+    "2026-05-05",
+    "2026-10-22"
+  ],
+  "weather_export_numpy_version": "2.5.4",
+  "supplementary_source_sha256": {
+    "fairy/scenarios/farm_world_fullseason_v2/scenario_full_season_hb_dryr5r6_hn58_std_waterlimit.py": "78c95ff83802285da9e7037ec1d597b22867c80127f8ba6e31977bc9b5f950a1",
+    "fairy/scenarios/farm_world_fullseason_v2/harbin_l3_scenario_helpers.py": "508aa0fb37be55a6dfe172b8d51c9a649ade22a6be4936f16f9f3a518fc32fe2",
+    "fairy/physics/profiles.py": "65c7f9805b2471391e9a4c43beee7b43ae91866fe5d4e13b3752b94f8c885823",
+    "fairy/physics/weather_engine.py": "f06a52e0f54a2d5ed5a369b3bbe4af191efd77205404dde666b79bf6e50e022f",
+    "fairy/physics/phenology_engine.py": "295a5f88a759fbd66b0f7b2e0a16585abf7d399d988b0e9e0bf7f5592f9069f7",
+    "fairy/physics/canopy_biomass_engine.py": "5cba695420f67d0a05ef64f50e3420377d830a7da85338d8845762d50827c831",
+    "fairy/physics/yield_recovery_engine.py": "207c5abb979da0c75deaf62217ef2912718df96c1c14b12db54a947a7e1fc8a2"
+  }
+}

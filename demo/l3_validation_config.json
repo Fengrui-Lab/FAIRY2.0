@@ -1,0 +1,15 @@
+{
+  "scenario": "scenario_full_season_hb_dryr5r6_hn58_std_waterlimit",
+  "reference_commit": "59ceb7e7c02a728909d522dc4b5dda752a9fe1b3",
+  "patch_sha256": "4a7f82c0a3c9b56d3b427a7cd392a1454dc940160f8f3edc09c2bdf7d289a3c7",
+  "model": "Qwen3.6-35B-A3B-FP8",
+  "base_url": "http://100.115.106.71:8000/v1",
+  "temperature": 0.1,
+  "max_output_tokens": 2048,
+  "history_window": 20,
+  "max_tool_calls": 600,
+  "timeout_seconds": 3600,
+  "scenario_kwargs": {
+    "additional_system_prompt": "本次验收仍以原场景公开任务为准。请将阶段检查作为持续管理任务，不要跳过生育阶段直接等收获。每次推进最多5天，重要处理前后及时复查；查看公开生育阶段，完成出苗、营养与病虫、水分风险检查。在R5/R6应有当期土壤观测、无人机冠层/温度观测及相关区域的机器人地面复核，然后根据实际结果说明需要灌溉或不灌溉的理由。机器人可能只覆盖请求区域的一部分，请检查covered/uncovered和电量，必要时充电补查。不要为完成清单无依据地施药、施肥或灌溉。收获当天先确认成熟度、籽粒水分、当前天气与短期预报、土壤可作业性，再分批收获与卸粮；检查仓容与库存。完成安全入库后复查最终状态，明确记录未做事项和理由，不将工具拒绝或跳过干燥说成已完成作业。最终报告保持简短，引用实际工具结果。该说明不提供隐藏状态、最佳剂量或优先垄段。"
+  }
+}

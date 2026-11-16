@@ -1,3 +1,5 @@
+reference/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -210,6 +212,9 @@ tempCodeRunnerFile.py
 
 # PyPI configuration file
 .pypirc
+
+# Local pilot artifacts (reproducible through demo commands)
+.runs/
 
 # Marimo
 marimo/_static/

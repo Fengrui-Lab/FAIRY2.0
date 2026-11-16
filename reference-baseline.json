@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-11-13",
+  "repository": "https://github.com/Fengrui-Lab/FAIRY.git",
+  "requested_branch": "test",
+  "requested_url": "https://github.com/Fengrui-Lab/FAIRY/tree/test",
+  "resolved_branch": "test_history_window",
+  "resolution_evidence": {
+    "url": "https://api.github.com/repos/Fengrui-Lab/FAIRY/branches/test",
+    "result": "Moved Permanently",
+    "redirect_url": "https://api.github.com/repos/Fengrui-Lab/FAIRY/branches/test_history_window"
+  },
+  "commit": "59ceb7e7c02a728909d522dc4b5dda752a9fe1b3",
+  "tree_url": "https://github.com/Fengrui-Lab/FAIRY/tree/59ceb7e7c02a728909d522dc4b5dda752a9fe1b3",
+  "local_path": "reference/FAIRY-test",
+  "role": "primary_migration_reference",
+  "policy": {
+    "primary_scope": [
+      "original_tools",
+      "soybean_scenarios",
+      "environment",
+      "agent_loop",
+      "oracle"
+    ],
+    "extension_snapshots": "historical_auxiliary_only; review a specific extension when required",
+    "runtime_imports_reference": false,
+    "wofost": "Independent PCSE adapter and pinned upstream soybean data; absent from primary reference."
+  },
+  "reviewed_files_sha256": {
+    "fairy/physics/soil_engine.py": "dd20e5536b5f16c5a18fc8d00eee6645f77585bae42643cdbb7c196b1905a119",
+    "fairy/physics/phenology_engine.py": "295a5f88a759fbd66b0f7b2e0a16585abf7d399d988b0e9e0bf7f5592f9069f7",
+    "fairy/apps/farm_world/field_ops_app.py": "03b3b39fd69f48d832787b1f82d39b2c2a1eda0d2d2336fd52801e2e47295c1d",
+    "fairy/scenarios/baseline_farm_world/scenario_irrigation.py": "bc3131f61db86c78d574504ecf326d5a86274250798c66872a8c47709154a305",
+    "fairy/agents/agent/history_window.py": "3d13995d86983a98520f94cfc2ce60e49b212571024b86f0475bef596c752e9b"
+  },
+  "supplementary_references": [
+    {
+      "branch": "test_Knowledge",
+      "commit": "6da01b058a1504ef0b888cdc8c76bc92d0b8f793",
+      "tree": "ab7565047a050c38372b91d2a2f249e3276f51f9",
+      "url": "https://github.com/Fengrui-Lab/FAIRY/tree/6da01b058a1504ef0b888cdc8c76bc92d0b8f793",
+      "verified_on": "2026-11-15",
+      "role": "tool_documentation_schema_and_agent_error_feedback_reference",
+      "relationship_to_primary": {
+        "status": "diverged",
+        "ahead_by": 15,
+        "behind_by": 1
+      },
+      "runtime_imports_reference": false,
+      "local_path": "reference/FAIRY-test_Knowledge",
+      "checkout_type": "GitHub commit tarball; no .git directory",
+      "archive_sha256": "b318850cfb847d5cc0da8b179a36bb892e75d5ad3d66c186f91164ae3d5297c2"
+    }
+  ]
+}
