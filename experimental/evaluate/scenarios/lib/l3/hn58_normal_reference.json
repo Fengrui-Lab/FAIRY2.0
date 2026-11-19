@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "calendar_id": "hn58_synthetic_normal_calendar_v1",
+  "baseline_fingerprint": "decebcd6bb3ce9c0c586f51faa1d13ca4e12351b8c994f15c8a2a7fa8f97d6f0",
+  "template_fingerprint": "6916230f0edc552988f34afc0c8f11c89c8b48fdd251ded9ea93bb650d4eae5c",
+  "reference_backend": "native",
+  "capabilities": {
+    "backend_id": "native",
+    "model": "ridge_water_rue_soybean",
+    "version": "2",
+    "crops": [
+      "soybean"
+    ],
+    "actions": [
+      "irrigate",
+      "full_season",
+      "plant",
+      "harvest"
+    ],
+    "timestep": "local_day"
+  },
+  "reference_prefix": "public inventory/weather/soil, prepare all ridges, plant all on start date; no irrigation",
+  "stage_starts": {
+    "pre_emergence": "2026-05-05",
+    "vegetative": "2026-05-12",
+    "R1": "2026-06-02",
+    "R3": "2026-06-18",
+    "R5": "2026-06-30",
+    "R6": "2026-07-11",
+    "R7": "2026-07-20",
+    "R8": "2026-07-24"
+  },
+  "process_files_sha256": {
+    "fairy/acps/backends/biology/native/season.py": "dd08252561c1869c7d350761170fa3ec763fe2f97d842442530cde0f07d94b4b",
+    "fairy/acps/backends/physical/native/backend.py": "2360268fc16ee7f85014096586818ca726371cc28b12211313e1ee9ad9435798",
+    "fairy/acps/ontology/crops/lib/soybean.py": "7bc572dbcf0664b78bd0fd30e5c2e0ed6235c13afc4f4b26443e6ef0db7a0cc0",
+    "fairy/events/session.py": "3485d22dd0ab107eafef35db91a5cc2f2c4414dbda1677d80cd1a1f4bdbd7089",
+    "evaluate/scenarios/season.py": "d84736ff4fb5d140f73ff8d3c0aa97613975a0915e6a7b397635a9f6f3a387c1"
+  }
+}

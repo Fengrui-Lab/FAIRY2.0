@@ -1,0 +1,100 @@
+contract_fingerprint: 315cbd4dae843c49e03f75ceda2bbded9a533a8736e662720af1edefac5be67b
+crop: soybean
+cultivar: HEINONG58
+phases:
+- completion: preparation_verified
+  goal: Prepare unplanted ridges for sowing using tractor fuel and time, ensuring
+    fields are trafficable.
+  id: preparation
+  observations:
+  - observe_soil_range
+  - get_current_weather
+  - inspect_inventory
+  operations:
+  - prepare_seedbed
+  source_ids:
+  - manual_reference
+  - operations
+  - physical
+- completion: establishment_verified
+  goal: Sow the cultivar on prepared ridges using seed inventory, maintaining specified
+    spacing and depth.
+  id: establishment
+  observations:
+  - inspect_crop
+  - observe_soil_range
+  operations:
+  - plant
+  source_ids:
+  - manual_reference
+  - operations
+  - physical
+  - biology
+- completion: growth_management_verified
+  goal: Monitor crop development and soil moisture, applying irrigation to manage
+    water stress during vegetative and reproductive stages.
+  id: growth_management
+  observations:
+  - inspect_crop
+  - observe_soil_range
+  - get_current_weather
+  - get_forecast
+  operations:
+  - irrigate_range
+  source_ids:
+  - manual_reference
+  - operations
+  - facilities
+  - biology
+- completion: harvest_verified
+  goal: Harvest mature ridges into the combine when crop is at the final maturity
+    stage and weather conditions permit.
+  id: harvest
+  observations:
+  - inspect_crop
+  - observe_soil_range
+  - get_current_weather
+  - inspect_inventory
+  operations:
+  - harvest
+  - unload
+  source_ids:
+  - manual_reference
+  - operations
+  - physical
+  - biology
+- completion: postharvest_verified
+  goal: Process and store harvested grain to safe moisture levels and secure storage
+    capacity.
+  id: postharvest
+  observations:
+  - inspect_inventory
+  operations:
+  - dry_grain
+  - store_grain
+  source_ids:
+  - manual_reference
+  - operations
+  - facilities
+  - physical
+schema: 1
+sources:
+  biology:
+    path: fairy/acps/backends/biology/native/season.py
+    sha256: dd08252561c1869c7d350761170fa3ec763fe2f97d842442530cde0f07d94b4b
+  facilities:
+    path: fairy/acps/ontology/infrastructure/season.py
+    sha256: 66f3e617bd24e8031f66aba729f47d2675e73b5da86667d61cba00915de786f9
+  manual_reference:
+    path: fairy/agents/loop/controller/season_oracle.py
+    sha256: 62bfe7ed648b7df4748921bd4e78125e0b42211d9f930277ac32017dfffee553
+  operations:
+    path: fairy/acps/ontology/equipment/operations.py
+    sha256: c7813bbd80faad696ae4729a47091ade51ce915f6601ccf9763cfc3d2bdc4df4
+  physical:
+    path: fairy/acps/backends/physical/native/backend.py
+    sha256: 2360268fc16ee7f85014096586818ca726371cc28b12211313e1ee9ad9435798
+  validator:
+    path: evaluate/metrics/season.py
+    sha256: e1ff8f57d6f1548d429b3017522acdb012a8724015b3f2b8c9f7646da92c11f4
+status: machine_checked

@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "source_file": "weather.json",
+  "source_sha256": "b9fd613f15ef1e6a216b0c557968ef5f377ca853df1c0050f18d34e3c7d8a1b2",
+  "derived_file": "weather_v2.json",
+  "derived_sha256": "7a656c6d4762a54ce9b925a4d68811f24e12c2957256f6f5fe2afc09553a1d0a",
+  "transformation": {
+    "rain_mm": 0.0,
+    "start": "2026-07-15",
+    "end": "2026-07-31",
+    "other_fields": "unchanged"
+  },
+  "purpose": "Fixed synthetic R5/R6 drought challenge for the reduced Native model; not historical station data or field calibration",
+  "reference": {
+    "sowing": "2026-05-05",
+    "planting": "all 64 ridges using public operations on start day",
+    "ridge": 22,
+    "expected_R5": "2026-07-15",
+    "expected_R6": "2026-07-23",
+    "expected_R7": "2026-08-01"
+  },
+  "comparison": "Same frozen forcing for every policy; never shift weather with candidate decisions"
+}

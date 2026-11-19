@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fairy-farm"
+version = "0.8.2"
+description = "Event-based agricultural agent simulation: shared soybean L1 and L3 runtime"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+wofost = ["pcse==6.0.13"]
+llm = ["openai>=1.60,<3"]
+test = ["pytest>=8"]
+typing = ["mypy>=1.20,<2", "types-PyYAML>=6"]
+oracle = ["PyYAML>=6,<7", "gymnasium>=1.1,<2", "stable-baselines3>=2.6,<3", "sb3-contrib>=2.6,<3"]
+
+[project.scripts]
+fairy = "interface.cli.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fairy", "evaluate", "interface"]
+
+[tool.pytest.ini_options]
+testpaths = ["demo"]
+pythonpath = ["."]
+
+[tool.mypy]
+mypy_path = "$MYPY_CONFIG_FILE_DIR"
+explicit_package_bases = true
+namespace_packages = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+files = ["experimental/fairy", "experimental/evaluate", "experimental/interface"]
+
+[[tool.mypy.overrides]]
+module = ["pcse", "pcse.*", "sb3_contrib", "sb3_contrib.*", "torch", "torch.*"]
+ignore_missing_imports = true
+follow_imports = "skip"

@@ -1,0 +1,28 @@
+{
+  "model": "Qwen3.6-35B-A3B-FP8",
+  "request_fingerprint": "c6d847cb785d4f003514754eb177ccc7ef6dbf3258605e3e19a00dbbbea41f77",
+  "knowledge_fingerprint": "979dff98f1efe644d26bb2ae6b60fdfa8032197cbcb1bc789f770861c04eca5c",
+  "status": "machine_checked_not_human_reviewed",
+  "source_scope": "local rebuilt source only",
+  "input_scope": "local_source_code",
+  "input_tokens": 12103,
+  "output_tokens": 597,
+  "review_notes": [
+    "Machine schema/source validation and local code review; not human-approved",
+    "Phase operation lists are non-exhaustive cues; runtime clock and all registered tools remain available",
+    "No fixed irrigation dose, dated schedule or manual reference execution order included"
+  ],
+  "revalidations": [
+    {
+      "version": "0.8.2",
+      "method": "local_type_and_documentation_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "c5579ac6162f9ce3ae8102542da02c2caf48601582fb8a88a6aa55966c37e889",
+      "current_asset_fingerprint": "a0ad184f65f22f5117282d18647f45142035d3d885e6748c03e4c7f58c01165e",
+      "status": "machine_schema_and_current_source_checked",
+      "notes": "Original model extraction identity is preserved above; this entry only rebinds unchanged lifecycle content to the reviewed source version."
+    }
+  ]
+}

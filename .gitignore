@@ -1,4 +1,6 @@
 reference/
+/.DS_Store
+/FAIRY-test_Knowledge/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

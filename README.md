@@ -1,85 +1,49 @@
-# FAIRY 2.0 · 统一 L1 / L3 骨架
+# FAIRY2.0 · 实验工作区
 
-基础场景为**大豆单地块补水**，另有天气查询与 Ontology 加载验证场景。两个场景均在 Native 和 WOFOST 后端运行。基础场景的公开工具为 `observe_soil`、`irrigate(depth_mm)`、`advance_time(hours)`。先观测、灌溉、推进到次日，再复查。L3 另外接入了重写的装备作业、合成观测和物料账本。
+当前 `kun` 分支用于验证 FAIRY2.0 的重建方案，尚不是公开稳定发行版。
+实现、测试和详细技术说明集中在 [`experimental/`](experimental/README.md)。
 
-## 迁移参考基线
+```text
+FAIRY2.0/
+├── README.md
+├── experimental/
+│   ├── fairy/
+│   ├── evaluate/
+│   ├── interface/
+│   ├── demo/
+│   ├── reference/          # 可选的本地历史源码，不入库
+│   └── pyproject.toml
+├── .venv/                  # 本机环境，不入库
+└── .runs/                  # 历史和本机验收证据，不入库
+```
 
-主要参考用户指定的 [FAIRY/test](https://github.com/Fengrui-Lab/FAIRY/tree/test)。2026-11-13 核对时，GitHub 将该分支接口重定向到 `test_history_window`，本地参考副本为 `reference/FAIRY-test/`，固定提交 `59ceb7e7c02a728909d522dc4b5dda752a9fe1b3`。身份和复核文件记录在 [reference-baseline.json](reference-baseline.json)。
-
-后续工具、场景、环境、Agent 循环和 Oracle 的移植均优先对照这份原始实现。原有 `FAIRY-jev`、`FAIRY-visualization`、`FAIRY-multiobjective` 仅作历史辅助，具体扩展确有需要时再单独审查；WOFOST 参数继续以其固定上游来源为准。原分支仍包含多套大豆场景，当前新骨架包含补水 L1、天气 L1，以及重建的 64 垄全季 L3；历史 L3 独立副本的通过结果不计入新骨架验收。
-
-切换参考不改变已实现模型的数值行为，也不把此前参考扩展分支的实现重新归因为原始分支；两者的来源与差异见过程说明。
-
-## 安装与复现
-
-Python ≥3.10。Native 本体只使用标准库；WOFOST、LLM、测试依赖分别可选。
+在仓库根目录创建虚拟环境、安装和执行：
 
 ```bash
-python -m venv .venv
-.venv/bin/python -m pip install -e '.[wofost,llm,test]'
-.venv/bin/python -m interface.cli run --backend native --out .runs/native_oracle.json
-.venv/bin/python -m interface.cli run --backend wofost --out .runs/wofost_oracle.json
-.venv/bin/python -m interface.cli replay .runs/native_oracle.json
-.venv/bin/python -m interface.cli replay .runs/wofost_oracle.json
+python3 -m venv .venv
+.venv/bin/python -m pip install -e './experimental[wofost,llm,oracle,test,typing]'
 .venv/bin/python -m pytest -q --disable-warnings
+.venv/bin/python -m interface.cli run --backend native
 ```
 
-安装后也可以用 `fairy run ...`。仅需要 Native 时使用 `pip install -e '.[test]'`。`.runs/` 是忽略的本地输出目录；重跑命令会替换指定产物。
+只验证 Native 可安装 `./experimental[test]`。运行和测试不需要本地历史源码或真实 LLM 凭证；历史版本索引见 [`reference-baseline.json`](experimental/reference-baseline.json)。从 `experimental/` 内运行时，用 `../.venv/bin/python`；
+相对输出路径以实际工作目录为准。已有产物不覆盖，新运行请使用新路径或 CLI 自动生成的路径。
 
-## 目录与依赖
+迁移没有改写历史实验产物，也没有移动现有虚拟环境。历史记录中的旧绝对路径仅表示当时运行位置。
+详细修复与兼容性边界见 [HSCC 修复报告](experimental/demo/HSCC_FIXES.md)。
 
-ACPS 按 `ontology` 与 `backends/{physical,biology}` 组织，无新增顶层业务目录。验收测试置于已有 `demo/`。
+当前首轮场景支持HEINONG58 normal、R1干旱、R5干旱及R1＋R5组合。
+设计与对照验证命令见[场景构建合同](experimental/evaluate/scenarios/CONSTRUCTION.md)，
+目录调整见[迁移说明](experimental/RELOCATION.md)。
 
-| 位置 | 本轮职责 |
-| --- | --- |
-| `fairy/acps/ontology/farm` | 农场、单地块尺寸和土壤参数 |
-| `fairy/acps/ontology/crops/lib` | 大豆参数 |
-| `fairy/acps/ontology` | 对象规格、操作契约与农业操作提供者 |
-| `fairy/acps/backends/biology/{native,wofost}` | 独立的生物／水分过程适配器 |
-| `fairy/events` | 唯一时钟、事件、待处理输入、恢复和回放 |
-| `fairy/agents` | 特权参考策略、公共上下文、模型适配和循环 |
-| `evaluate` | 声明式 L1 / L3 场景与按任务分派的指标 |
-| `interface/cli` | 运行、恢复、查看、回放、评价入口 |
+本轮完成情况与验证结果见[0.6.0 场景及迁移验收](experimental/demo/SCENARIO_CONSTRUCTION.md)。
 
-场景不构造引擎，工具不直接写引擎私有状态，模型不获得运行时对象。`web`、`jev`、`kg`、各 `custom`、L2/L4 目录原样保留，暂无实现。
+自动Oracle首轮开发、真实训练与候选验证方法见[实施说明](experimental/demo/AUTO_ORACLE_IMPLEMENTATION.md)。
 
-## 阅读顺序
+WOFOST全季及自动Oracle接入（0.8.1，代理品种，非黑农58校准）见
+[实施与验收](experimental/demo/WOFOST_FULL_SEASON.md)和
+[后端过程说明](experimental/fairy/acps/backends/biology/wofost/README.md)。
 
-1. [物理／生物过程迁移说明](fairy/acps/backends/biology/PROCESS_AUDIT.md)：历史来源、保留和省略的过程、方程与参数变化、科学边界。
-2. [运行时语义](fairy/events/README.md)：时间、事件、权限、恢复与回放。
-3. [评测说明](evaluate/README.md)：成功条件与指标。
-4. [复现实验](demo/README.md)：本轮结果和验证命令。
-5. [Agent 接入](fairy/agents/README.md) 与 [CLI](interface/README.md)。
+逐模块阅读、检查与修改可从[代码框架审查与修改指导书](experimental/CODE_REVIEW_GUIDE.md)开始，含实际能力地图、M00–M14检查表、已知缺口及验证入口。
 
-本轮验证架构和水分操作闭环，不构成田间校准或大豆产量模型验证。历史场景 ID、Oracle 产物和评分均不兼容新骨架。运行及新骨架测试不读取 `reference/`；独立的历史审计测试使用明确指定的参考来源。
-
-## Ontology 初步移植（0.3）
-
-场景显式声明被动地块、土壤观测资源、灌溉资源和可选天气服务；运行时加载对象、检查引用、绑定后端并仅开放指定操作。Native/WOFOST 通过显式工厂注册接入。原 L1 保留三个操作；`--scenario soybean_l1_weather_irrigation_v1` 增加天气和预报查询，公开数据与引擎 forcing 分开。
-
-当前 0.4.1 恢复状态为 schema 4，校验对象／操作／生物与物理后端绑定指纹。旧产物仅能 inspect，运行／回放需重新生成。L3 已接入装备作业和物料账本；Native 全季过程为未校准的简化重建，不代表原版全部农艺能力。迁移范围与后续批次见 [过程审计](fairy/acps/backends/biology/PROCESS_AUDIT.md)。
-
-## Shared full-season L3 (0.4)
-
-```bash
-python -m interface.cli run --scenario soybean_l3_hn58_waterlimit_v1 --backend native --agent oracle --out .runs/l3.json
-python -m interface.cli replay .runs/l3.json
-python -m interface.cli evaluate .runs/l3.json
-```
-
-L1 and L3 use the same Runtime, event schema, operation registry, agent loop, CLI,
-artifact and replay implementation. The task chooses a declared evaluator and
-trusted reference strategy. No runtime imports or executes `reference/` or the
-legacy validation copy. Default task context has no detail/library/expert prompt.
-
-L3 models 64 spatial soil/crop units, sowing, equipment work, observation,
-area-accounted irrigation, harvest, unloading, drying and safe storage. Grain
-comes from a reduced radiation-driven process, never a fixed harvest fixture.
-It is **not calibrated HEINONG58 yield prediction**. Nutrient/pesticide processes,
-full legacy agronomic equivalence, and WOFOST L3 are not implemented. Requesting
-WOFOST L3 fails explicitly; Native and WOFOST L1 remain available.
-
-See [new-runtime validation and limitations](demo/L3_NEW_RUNTIME.md) and
-[full-season process audit](fairy/acps/backends/biology/native/SEASON_AUDIT.md).
-
-当前版本全方位审阅、修复项与未覆盖能力见 [版本审阅报告](demo/CURRENT_VERSION_REVIEW.md)。
+0.8.2全模块类型、核心注释与IDE导航见[类型与导航说明](experimental/TYPING.md)。
