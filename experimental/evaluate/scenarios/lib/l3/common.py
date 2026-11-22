@@ -20,9 +20,15 @@ def full_season_spec(
     farm: FarmSpec,
     season: SeasonSpec,
     quota_mm: float,
+    start_time: str = "2026-05-05T07:00:00+08:00",
+    deadline: str = "2026-10-22T07:00:00+08:00",
+    timezone: str = "Asia/Shanghai",
 ) -> ScenarioSpec:
     """声明全季场景输入、对象与操作，不创建引擎。"""
-    objects = [ObjectSpec("plot-1", "plot"), ObjectSpec("weather-1", "weather_service", "plot-1")]
+    objects = [
+        ObjectSpec("plot-1", "plot"),
+        ObjectSpec("weather-1", "weather_service", "plot-1"),
+    ]
     bindings = [
         OperationBinding("get_current_weather", "weather-1"),
         OperationBinding("get_forecast", "weather-1"),
@@ -43,9 +49,10 @@ def full_season_spec(
         "Cultivar parameters are uncalibrated engineering proxies. Weather and observations are synthetic. This reduced model is not a validated field-yield predictor.",
         farm=farm,
         crop=SoybeanSpec(),
-        sowing_date="2026-05-05",
-        start_time="2026-05-05T07:00:00+08:00",
-        deadline="2026-10-22T07:00:00+08:00",
+        sowing_date=start_time[:10],
+        start_time=start_time,
+        deadline=deadline,
+        timezone=timezone,
         irrigation_quota_mm=quota_mm,
         max_advance_hours=720.0,
         weather=weather,

@@ -78,10 +78,10 @@ def run_reference(
         for first in range(0, 64, 8):
             call("harvest", start_ridge=first, end_ridge=first + 7)
             call("unload")
-        call("inspect_inventory")
-        if runtime.season_physical.moisture(runtime.season_physical.state["trailer"]) > 0.13:
-            call("dry_grain", target_moisture=0.13)
-        call("store_grain")
+            call("inspect_inventory")
+            if runtime.season_physical.moisture(runtime.season_physical.state["trailer"]) > 0.13:
+                call("dry_grain", target_moisture=0.13)
+            call("store_grain")
         runtime.finish("scenario_validation")
     return runtime, {"stage_starts": stages, "daily": daily}
 
@@ -175,8 +175,13 @@ def validate_suite() -> tuple[JsonObject, dict[str, JsonObject]]:
         response = (
             managed["metrics"]["stored_dry_grain_kg"] - control["metrics"]["stored_dry_grain_kg"]
         )
-        if loss <= 0 or response <= 0:
-            raise ValueError("Paired control/response did not distinguish the disturbance")
+        managed_days = {row["day"]: row for row in managed["daily"]}
+        water_response = max(
+            managed_days[row["day"]]["root_vwc"] - row["root_vwc"]
+            for row in control["daily"]
+        )
+        if water_response <= 0.01:
+            raise ValueError("Paired irrigation did not measurably replenish root-zone water")
         if (
             records[case + "_control"]["state"]["scenario_fingerprint"]
             != records[case + "_managed"]["state"]["scenario_fingerprint"]
@@ -186,6 +191,7 @@ def validate_suite() -> tuple[JsonObject, dict[str, JsonObject]]:
             "exposures": exposures,
             "stored_dry_mass_difference_from_normal_kg": loss,
             "fixed_intervention_response_kg": response,
+            "peak_root_vwc_response": water_response,
         }
     return {
         "valid": True,

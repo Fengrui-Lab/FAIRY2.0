@@ -14,3 +14,4 @@ No reference runtime, prompt library or Oracle workflow is constructed here.
 [构建合同](CONSTRUCTION.md)定义独立normal、冻结参考日历、降雨扰动组合及公开/审计边界。
 新增四个L3入口共享同一运行时：normal、R1干旱、R5干旱、R1＋R5组合。
 `lib/l3/normal_validation.py`是显式离线参考/对照验证程序，不是场景声明工厂；只有它会创建验证引擎。
+新版历史天气场景、数据来源和 L1/L2 切片见 [哈尔滨历史天气试点](HISTORICAL_PILOT.md)。

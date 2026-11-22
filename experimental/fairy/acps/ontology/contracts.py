@@ -10,7 +10,7 @@ from fairy.acps.ontology.farm.spec import finite
 # objects and backend references use dataclasses, TypedDicts and Protocols.
 JsonObject: TypeAlias = dict[str, Any]
 OperationTiming: TypeAlias = Literal[
-    "read_only", "next_local_midnight", "advance_clock", "scheduled_job"
+    "read_only", "next_local_midnight", "advance_clock", "scheduled_job", "immediate"
 ]
 
 
@@ -158,6 +158,7 @@ class OperationDefinition:
             raise ValueError("Operation description is required")
         if self.timing not in (
             "read_only",
+            "immediate",
             "next_local_midnight",
             "advance_clock",
             "scheduled_job",

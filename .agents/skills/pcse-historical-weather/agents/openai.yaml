@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCSE 历史天气"
+  short_description: "通过 PCSE 内置接口获取并归档指定地区的 ERA5 逐日历史天气"
+  default_prompt: "使用 $pcse-historical-weather 获取指定地区和日期范围的 ERA5 历史天气轨迹。"

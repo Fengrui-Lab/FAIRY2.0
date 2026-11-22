@@ -6,7 +6,7 @@ The adapter owns full numerical state and supports direct state restoration. It 
 
 ## Full season
 
-`season.py` is a separate capability-selected Native process used by the shared
-Runtime for L3. The L1 `backend.py` stays unchanged. See `SEASON_AUDIT.md` for
-source parameters, equations, simplifications and limits. Neither model imports
-legacy runtime code. L3 is not validated field-yield prediction.
+`season.py` adapts the original FAIRY soil and canopy kernels to the shared L3
+Runtime. See [migration and validation](MIGRATION.md) for the current process,
+compatibility and test results. [SEASON_AUDIT.md](SEASON_AUDIT.md) describes the
+previous reduced model. L1 stays unchanged.

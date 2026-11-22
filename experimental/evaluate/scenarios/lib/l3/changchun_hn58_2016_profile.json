@@ -1,0 +1,19 @@
+{
+  "region": "changchun",
+  "requested_point": [43.82, 125.32],
+  "timezone": "Asia/Shanghai",
+  "role": "baseline",
+  "start_date": "2016-05-05",
+  "end_date": "2016-10-22",
+  "exposure": ["2016-07-01", "2016-08-15"],
+  "farm": {
+    "length_m": 268,
+    "width_m": 70.4,
+    "initial_vwc": 0.30
+  },
+  "season": {
+    "cultivar": "HEINONG58",
+    "hydraulic_zones": [[22, 43, 0.285, 0.82, 0.90]]
+  },
+  "quota_mm": 12.0
+}

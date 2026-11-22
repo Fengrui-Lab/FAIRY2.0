@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from fairy.acps.backends.biology.contracts import (
         CropObservation,
         HarvestProjection,
+        SeedbedObservation,
         SoilRidgeObservation,
         SurveyObservation,
         WaterFlux,
@@ -64,11 +65,13 @@ class WofostSeasonBackend(SeasonBiologyBackend):
     capabilities = BackendCapabilities(
         "wofost",
         "spatial_Wofost81_WLP_CWB",
-        "1+pcse6.0.13",
-        actions=("irrigate", "full_season", "plant", "harvest"),
+        "2+pcse6.0.13",
+        actions=("irrigate", "full_season", "plant", "harvest", "seedbed_observation"),
     )
 
-    def __init__(self, farm: FarmSpec, crop: SoybeanSpec, start: str, season: SeasonSpec) -> None:
+    def __init__(
+        self, farm: FarmSpec, crop: SoybeanSpec, start: str, season: SeasonSpec
+    ) -> None:
         """保存显式依赖与初态；模型服务调用发生在决策阶段而非构造阶段。"""
         self.farm, self.crop, self.config, self.start = farm, crop, season, start
         if season.cultivar != "Soybean_901_proxy":
@@ -77,7 +80,9 @@ class WofostSeasonBackend(SeasonBiologyBackend):
         self.engines: list[WofostBackend] = []
         for i in range(season.ridge_count):
             capacity, capture, efficiency = self.hydraulic_parameters(i)
-            local = replace(farm, field_capacity_vwc=capacity, irrigation_efficiency=efficiency)
+            local = replace(
+                farm, field_capacity_vwc=capacity, irrigation_efficiency=efficiency
+            )
             self.engines.append(WofostBackend(local, crop, start, bare=True))
         self.rows: list[WofostRidgeState] = [
             dict(
@@ -93,6 +98,7 @@ class WofostSeasonBackend(SeasonBiologyBackend):
             for _ in self.engines
         ]
         self.next_day = start
+        self.seedbed_temperature_c = 10.0
         self.journal: list[JsonObject] = []
         self.inputs: list[JsonObject] = []
 
@@ -170,7 +176,9 @@ class WofostSeasonBackend(SeasonBiologyBackend):
                 ridge_id=i,
                 stage=self._phase(i),
                 grain_moisture=(
-                    round(self.rows[i]["moisture"], 3) if self._phase(i) == "mature" else None
+                    round(self.rows[i]["moisture"], 3)
+                    if self._phase(i) == "mature"
+                    else None
                 ),
             )
             for i in indices
@@ -179,22 +187,46 @@ class WofostSeasonBackend(SeasonBiologyBackend):
     def soil_observation(self, indices: Iterable[int]) -> list[SoilRidgeObservation]:
         """返回目标垄的根区体积含水率，单位m³/m³，按公开精度取整。"""
         return [
-            dict(ridge_id=i, root_vwc=round(float(self.engines[i].model.get_variable("SM")), 3))
+            dict(
+                ridge_id=i,
+                root_vwc=round(float(self.engines[i].model.get_variable("SM")), 3),
+            )
             for i in indices
         ]
 
-    def survey(self, indices: Iterable[int], thermal: bool = False) -> list[SurveyObservation]:
+    def seedbed_observation(self, indices: Iterable[int]) -> list[SeedbedObservation]:
+        """Estimate seedbed temperature from settled weather; PCSE has no seedbed VWC."""
+        temperature = round(self.seedbed_temperature_c, 2)
+        return [
+            dict(
+                ridge_id=i,
+                seedbed_temperature_c=temperature,
+                seedbed_vwc=None,
+                minimum_temperature_c=10.0,
+                temperature_ready=temperature >= 10.0,
+            )
+            for i in self._targets(indices)
+        ]
+
+    def survey(
+        self, indices: Iterable[int], thermal: bool = False
+    ) -> list[SurveyObservation]:
         """计算合成NDVI或冠层温差；非真实仪器模拟，不可用冠层温差用None表达。"""
         observations: list[SurveyObservation] = []
         for i in indices:
             r, engine = self.rows[i], self.engines[i]
             lai = float(engine.model.get_variable("LAI") or 0.0)
             available = (
-                r["planted"] and not r["harvested"] and self._phase(i) != "mature" and lai > 0
+                r["planted"]
+                and not r["harvested"]
+                and self._phase(i) != "mature"
+                and lai > 0
             )
             if thermal:
                 if not available:
-                    observations.append(dict(ridge_id=i, canopy_air_delta_c=None, available=False))
+                    observations.append(
+                        dict(ridge_id=i, canopy_air_delta_c=None, available=False)
+                    )
                     continue
                 capacity, _, _ = self.hydraulic_parameters(i)
                 sm = float(engine.model.get_variable("SM"))
@@ -218,7 +250,9 @@ class WofostSeasonBackend(SeasonBiologyBackend):
                 observations.append(
                     dict(
                         ridge_id=i,
-                        ndvi=round(0.15 + 0.7 * (1 - exp(-0.6 * lai)) if available else 0.15, 3),
+                        ndvi=round(
+                            0.15 + 0.7 * (1 - exp(-0.6 * lai)) if available else 0.15, 3
+                        ),
                     )
                 )
         return observations
@@ -252,7 +286,9 @@ class WofostSeasonBackend(SeasonBiologyBackend):
         finite(depth, "depth_mm", 0)
         for i in ids:
             self.rows[i]["pending_mm"] += depth
-        self.inputs.append(dict(kind="irrigate", day=self.next_day, indices=list(ids), depth=depth))
+        self.inputs.append(
+            dict(kind="irrigate", day=self.next_day, indices=list(ids), depth=depth)
+        )
 
     def project_harvest(self, indices: Iterable[int]) -> HarvestProjection:
         """只读计算可收获毛粮，返回干质量和水质量kg；未成熟垄拒绝。"""
@@ -310,11 +346,23 @@ class WofostSeasonBackend(SeasonBiologyBackend):
                     r["mature_dry_kg"] = float(mass) * self.ridge_area / 10000
             if self._phase(i) == "mature":
                 r["moisture"] = min(
-                    0.35, max(0.10, r["moisture"] - 0.018 + min(0.04, weather.rain_mm * 0.003))
+                    0.35,
+                    max(
+                        0.10, r["moisture"] - 0.018 + min(0.04, weather.rain_mm * 0.003)
+                    ),
                 )
+        # First-order shallow-soil temperature estimate with daily rain cooling.
+        target_temperature = (
+            weather.tmin_c + weather.tmax_c
+        ) / 2 - 0.025 * weather.rain_mm
+        self.seedbed_temperature_c += 0.40 * (
+            target_temperature - self.seedbed_temperature_c
+        )
         self.inputs.append(dict(kind="day", day=weather.day, weather=asdict(weather)))
         self.journal.append(dict(weather=asdict(weather), irrigation_mm=gross))
-        self.next_day = (date.fromisoformat(self.next_day) + timedelta(days=1)).isoformat()
+        self.next_day = (
+            date.fromisoformat(self.next_day) + timedelta(days=1)
+        ).isoformat()
         return totals
 
     def audit(self) -> JsonObject:
@@ -326,18 +374,23 @@ class WofostSeasonBackend(SeasonBiologyBackend):
             irrigation_mm=sum(r.irrigation_mm for r in rows) / len(rows),
             model_status="uncalibrated Soybean_901 proxy; synthetic grain moisture and sensors",
             ridges=[
-                dict(status=asdict(r), pcse=e.audit()["pcse"]) for r, e in zip(rows, self.engines)
+                dict(status=asdict(r), pcse=e.audit()["pcse"])
+                for r, e in zip(rows, self.engines)
             ],
         )
 
     def export_state(self) -> JsonObject:
         """导出可信恢复快照；此数据不是LLM公开观测。"""
         return dict(
-            schema=1,
+            schema=2,
             capabilities=asdict(self.capabilities),
             crop_data_sha256=self.engines[0].provenance["sha256"],
             inputs=copy.deepcopy(self.inputs),
-            summary=dict(next_day=self.next_day, rows=copy.deepcopy(self.rows)),
+            summary=dict(
+                next_day=self.next_day,
+                rows=copy.deepcopy(self.rows),
+                seedbed_temperature_c=self.seedbed_temperature_c,
+            ),
         )
 
     def load_state(self, payload: JsonObject) -> None:

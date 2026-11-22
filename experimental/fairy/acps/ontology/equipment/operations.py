@@ -61,6 +61,88 @@ PROVIDERS = {
 }
 
 
+SEEDBED = replace(
+    operation(
+        "observe_seedbed_range",
+        "Observe simulated seedbed temperature and topsoil moisture. After the first "
+        "settled local day, planting requires every selected ridge to be temperature-ready.",
+        RANGE,
+        True,
+    ),
+    required_backend_actions=("full_season", "seedbed_observation"),
+)
+
+SURFACE_WATER = replace(
+    operation(
+        "observe_surface_water",
+        "Observe standing water depth in mm and elapsed modeled crop waterlogging days.",
+        RANGE,
+        True,
+    ),
+    required_backend_actions=("full_season", "surface_drainage"),
+)
+DRAIN_SURFACE = replace(
+    operation(
+        "drain_surface",
+        "Immediately remove available standing water up to the specified depth on each "
+        "selected drainage-enabled ridge. No soil water is removed.",
+        RANGE + (Parameter("max_depth_mm", "number", 0.01, 50, unit="mm"),),
+        timing="immediate",
+    ),
+    required_backend_actions=("full_season", "surface_drainage"),
+)
+SCOUT_BIOTIC = replace(
+    operation(
+        "scout_biotic",
+        "Read simulated insect feeding and disease pressure indices and protection days on selected ridges.",
+        RANGE,
+        True,
+    ),
+    required_backend_actions=("full_season", "biotic_management"),
+)
+TREAT_BIOTIC = replace(
+    operation(
+        "treat_biotic",
+        "Queue simulated crop protection with kind insect or disease. Uses one inventory unit per ridge "
+        "and settles at the next local midnight; rainfall can reduce its effect.",
+        RANGE + (Parameter("kind", "string"),),
+        timing="next_local_midnight",
+    ),
+    required_backend_actions=("full_season", "biotic_management"),
+)
+
+OBSERVE_STAND = replace(
+    operation(
+        "observe_stand_range",
+        "Observe emerged stand fraction and original/replanted stages. Stand is unavailable before emergence.",
+        RANGE,
+        True,
+    ),
+    required_backend_actions=("full_season", "stand_repair"),
+)
+REPLANT = replace(
+    operation(
+        "replant_gaps",
+        "Sow only unfilled seed sites in selected emerged vegetative ridges; preserves existing plants.",
+        RANGE,
+    ),
+    required_backend_actions=("full_season", "stand_repair"),
+)
+
+INSPECT_DRYER = operation("inspect_dryer", "Read the modeled dryer's current availability and repair duration.", read=True)
+REPAIR_DRYER = operation("repair_dryer", "Service the locked-out dryer. Advances time and leaves grain in place.")
+
+SEASON_PROVIDERS = {
+    **PROVIDERS,
+    "seedbed_sensor": (SEEDBED,),
+    "surface_drainage": (SURFACE_WATER, DRAIN_SURFACE),
+    "crop_protection": (SCOUT_BIOTIC, TREAT_BIOTIC),
+    "stand_sensor": (OBSERVE_STAND,),
+    "stand_repair_tractor": (REPLANT,),
+    "dryer_maintenance": (INSPECT_DRYER, REPAIR_DRYER),
+}
+
+
 @dataclass(frozen=True)
 class SeasonProvider:
     """全季对象的身份与操作目录；不持有第二份引擎或物料状态。"""
@@ -70,4 +152,4 @@ class SeasonProvider:
     @property
     def operations(self) -> tuple[OperationDefinition, ...]:
         """按声明的提供者类型返回固定操作目录，不实例化引擎。"""
-        return PROVIDERS[self.spec.type_id]
+        return SEASON_PROVIDERS[self.spec.type_id]

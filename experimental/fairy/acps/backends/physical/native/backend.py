@@ -1,7 +1,7 @@
 """Transactional equipment and dry-grain/water ledger, driven by Runtime time."""
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import Iterable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from evaluate.scenarios.season import SeasonSpec
@@ -9,9 +9,11 @@ if TYPE_CHECKING:
     from fairy.acps.backends.physical.contracts import GrainBatch, WorkPlan
     from fairy.acps.ontology.contracts import JsonObject
     from fairy.acps.ontology.farm.spec import FarmSpec
+from fairy.acps.backends.biology.contracts import StandRepairBackend
 from fairy.acps.backends.physical.contracts import (
     PhysicalBackend,
     PhysicalState,
+    DryerState,
     COMPONENTS,
     CONTAINERS,
 )
@@ -21,7 +23,6 @@ import copy
 from math import ceil
 from fairy.acps.backends.physical.contracts import PhysicalCapabilities
 from fairy.acps.ontology.contracts import OperationRejected
-
 
 class NativePhysicalBackend(PhysicalBackend):
     """串行装备作业与唯一物料账本。
@@ -36,13 +37,15 @@ class NativePhysicalBackend(PhysicalBackend):
     capabilities = PhysicalCapabilities(
         "native",
         "serial_equipment_material_ledger",
-        "2",
+        "3",
         (
             "prepare_seedbed",
             "plant",
+            "replant_gaps",
             "harvest",
             "unload",
             "dry_grain",
+            "repair_dryer",
             "store_grain",
             "survey_multispectral",
             "survey_thermal",
@@ -70,7 +73,51 @@ class NativePhysicalBackend(PhysicalBackend):
             harvest_loss_dry_kg=0.0,
             harvest_loss_water_kg=0.0,
             removed_water_kg=0.0,
+            dryer=self._initial_dryer(),
+
         )
+
+    def _initial_dryer(self) -> DryerState | None:
+        if not self.config.dryer_failure_after_dried_batches:
+            return None
+        return dict(trailer_dried=False, dried_batches_stored=0, fault_active=False, repaired=False)
+
+    def dryer_observation(self) -> JsonObject:
+        """Report current availability and the public service duration."""
+        dryer = self.state["dryer"]
+        if dryer is None:
+            raise OperationRejected("DRYER_FAULT_SCENARIO_UNAVAILABLE")
+        return {
+            "availability": "out_of_service" if dryer["fault_active"] else "ready",
+            "fault": "BATCH_LOCKOUT" if dryer["fault_active"] else None,
+            "repair_hours": self.config.dryer_repair_hours,
+        }
+
+    def _update_dryer(self, dryer: DryerState, op: str) -> None:
+        if op == "dry_grain":
+            if dryer["fault_active"]:
+                raise ValueError("A locked-out dryer cannot complete a drying job")
+            dryer["trailer_dried"] = True
+        elif op == "store_grain" and dryer["trailer_dried"]:
+            dryer["trailer_dried"] = False
+            dryer["dried_batches_stored"] += 1
+            if dryer["dried_batches_stored"] == self.config.dryer_failure_after_dried_batches:
+                dryer["fault_active"] = True
+        elif op == "repair_dryer":
+            if not dryer["fault_active"]:
+                raise ValueError("Dryer service cannot complete without a fault")
+            dryer["fault_active"] = False
+            dryer["repaired"] = True
+
+    def validate_dryer_history(self, operations: Iterable[str]) -> None:
+        """Check the equipment lifecycle against successfully completed operations."""
+        dryer = self._initial_dryer()
+        if dryer is None:
+            return
+        for operation in operations:
+            self._update_dryer(dryer, operation)
+        if dryer != self.state["dryer"]:
+            raise ValueError("Dryer state disagrees with completed batch and repair events")
 
     @staticmethod
     def weight(batch: GrainBatch) -> float:
@@ -107,13 +154,13 @@ class NativePhysicalBackend(PhysicalBackend):
         ids = list(biology.indices(args)) if "start_ridge" in args else []
         n = len(ids)
         duration, fuel = 0.0, 0.0
-        if op in ("prepare_seedbed", "plant", "harvest"):
+        if op in ("prepare_seedbed", "plant", "harvest", "replant_gaps"):
             if weather.rain_mm > 10 or any(
                 biology.management_state()[i].root_vwc > 0.36 for i in ids
             ):
                 raise OperationRejected("FIELD_NOT_TRAFFICABLE")
-            duration = n * ({"prepare_seedbed": 0.08, "plant": 0.06, "harvest": 0.10}[op])
-            fuel = n * ({"prepare_seedbed": 0.6, "plant": 0.4, "harvest": 0.9}[op])
+            duration = n * {"prepare_seedbed": 0.08, "plant": 0.06, "harvest": 0.10, "replant_gaps": 0.06}[op]
+            fuel = n * {"prepare_seedbed": 0.6, "plant": 0.4, "harvest": 0.9, "replant_gaps": 0.4}[op]
             if s["fuel_l"] + 1e-9 < fuel:
                 raise OperationRejected("INSUFFICIENT_FUEL")
         if op == "prepare_seedbed":
@@ -132,6 +179,11 @@ class NativePhysicalBackend(PhysicalBackend):
             needed = n * ceil(2 * self.farm.length_m / args["spacing_m"])
             if needed > s["seeds"]:
                 raise OperationRejected("INSUFFICIENT_SEEDS")
+        elif op == "replant_gaps":
+            if not isinstance(biology, StandRepairBackend):
+                raise OperationRejected("STAND_REPAIR_UNAVAILABLE")
+            if sum(biology.plan_replant(ids).values()) > s["seeds"]:
+                raise OperationRejected("INSUFFICIENT_SEEDS")
         elif op == "harvest":
             if any(not biology.management_state()[i].harvestable for i in ids):
                 raise OperationRejected("CROP_NOT_HARVESTABLE")
@@ -149,7 +201,14 @@ class NativePhysicalBackend(PhysicalBackend):
             if self.weight(s["combine"]) + self.weight(s["trailer"]) > c.trailer_capacity_kg + 1e-9:
                 raise OperationRejected("TRAILER_CAPACITY_EXCEEDED")
             duration = 0.25
+        elif op == "repair_dryer":
+            dryer = s["dryer"]
+            if dryer is None or not dryer["fault_active"]:
+                raise OperationRejected("DRYER_SERVICE_NOT_REQUIRED")
+            duration = c.dryer_repair_hours
         elif op == "dry_grain":
+            if s["dryer"] is not None and s["dryer"]["fault_active"]:
+                raise OperationRejected("DRYER_OUT_OF_SERVICE")
             if self.weight(s["trailer"]) <= 0:
                 raise OperationRejected("TRAILER_EMPTY")
             if self.moisture(s["trailer"]) <= args["target_moisture"]:
@@ -218,6 +277,15 @@ class NativePhysicalBackend(PhysicalBackend):
             s["seeds_used"] += used
             biology.plant(ids, 2 / (self.farm.width_m / c.ridge_count) / args["spacing_m"])
             result["seeds_used"] = used
+        elif op == "replant_gaps":
+            if not isinstance(biology, StandRepairBackend):
+                raise OperationRejected("STAND_REPAIR_UNAVAILABLE")
+            filled = biology.replant(ids)
+            used = sum(filled.values())
+            s["seeds"] -= used
+            s["seeds_used"] += used
+            result["seeds_used"] = used
+            result["filled_sites"] = [{"ridge_id": i, "seeds": count} for i, count in filled.items()]
         elif op == "harvest":
             gross = biology.harvest(ids)
             batch: GrainBatch = {
@@ -268,6 +336,10 @@ class NativePhysicalBackend(PhysicalBackend):
             device = args["equipment"]
             s["electricity_kwh"] += (100 - s["battery"][device]) * 0.01
             s["battery"][device] = 100.0
+        if s["dryer"] is not None:
+            self._update_dryer(s["dryer"], op)
+            if op == "repair_dryer":
+                result["dryer"] = self.dryer_observation()
         if ids:
             result["completed_ridges"] = ids
         return result
@@ -275,14 +347,14 @@ class NativePhysicalBackend(PhysicalBackend):
     def export_state(self) -> JsonObject:
         """导出可信恢复快照；此数据不是LLM公开观测。"""
         return dict(
-            schema=1, capabilities=asdict(self.capabilities), state=copy.deepcopy(self.state)
+            schema=2, capabilities=asdict(self.capabilities), state=copy.deepcopy(self.state)
         )
 
     def load_state(self, payload: JsonObject) -> None:
         """验证版本与守恒后恢复内部状态；调用方必须提供匹配的场景和新实例。"""
         import json
 
-        if payload.get("schema") != 1 or json.dumps(
+        if payload.get("schema") != 2 or json.dumps(
             payload.get("capabilities"), sort_keys=True
         ) != json.dumps(asdict(self.capabilities), sort_keys=True):
             raise ValueError("Incompatible physical backend")
@@ -294,8 +366,24 @@ class NativePhysicalBackend(PhysicalBackend):
         candidate = copy.deepcopy(payload["state"])
         c = self.config
         for k, v in candidate.items():
-            if k not in ("prepared", "battery", "combine", "trailer", "stored_batches"):
+            if k not in ("prepared", "battery", "combine", "trailer", "stored_batches", "dryer"):
                 finite(v, k, 0)
+        dryer = candidate["dryer"]
+        if (dryer is None) != (not c.dryer_failure_after_dried_batches):
+            raise ValueError("Dryer state does not match its scenario configuration")
+        if dryer is not None:
+            expected = self._initial_dryer()
+            assert expected is not None
+            if (set(dryer) != set(expected)
+                or any(type(dryer[key]) is not bool for key in ("trailer_dried", "fault_active", "repaired"))
+                or type(dryer["dried_batches_stored"]) is not int
+                or not 0 <= dryer["dried_batches_stored"] <= len(candidate["stored_batches"])
+                or dryer["fault_active"] != (
+                    dryer["dried_batches_stored"] >= c.dryer_failure_after_dried_batches
+                    and not dryer["repaired"]
+                )
+                or (dryer["repaired"] and dryer["dried_batches_stored"] < c.dryer_failure_after_dried_batches)):
+                raise ValueError("Invalid dryer fault or repair state")
         if any(type(candidate[k]) is not int for k in ("seeds", "seeds_used")):
             raise ValueError("Invalid seed count")
         if candidate["seeds"] + candidate["seeds_used"] != c.initial_seed_count:

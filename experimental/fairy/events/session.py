@@ -24,6 +24,10 @@ from fairy.acps.backends.biology.contracts import (
     restore_backend,
     BiologyBackend,
     SeasonBiologyBackend,
+    SeedbedBiologyBackend,
+    StandRepairBackend,
+    SurfaceDrainageBackend,
+    BioticManagementBackend,
 )
 from fairy.acps.ontology.contracts import OperationRequest, OperationResult, OperationRejected
 from fairy.events.records import EventRecord, canonical, detached, fingerprint
@@ -311,10 +315,58 @@ class Runtime:
         )
         return {"time": self.now.isoformat()}
 
+    def _seedbed_ready(self, args: JsonObject, *, check_plant: bool) -> JsonObject:
+        """Project the seedbed without advancing time, or enforce the planting gate."""
+        backend = self.season_backend
+        if not isinstance(backend, SeedbedBiologyBackend):
+            raise OperationRejected("SEEDBED_OBSERVATION_UNSUPPORTED")
+        rows = backend.seedbed_observation(backend.indices(args))
+        settled = self.now.date().isoformat() > self.scenario.sowing_date
+        if check_plant and not settled:
+            raise OperationRejected("SEEDBED_NOT_SETTLED")
+        if check_plant and any(not row["temperature_ready"] for row in rows):
+            raise OperationRejected("SEEDBED_TOO_COLD")
+        return {"observations": rows, "time": self.now.isoformat(), "settled": settled}
+
     def _season_operation(self, name: str, args: JsonObject, cause: int) -> JsonObject:
         """路由全季观测、分区灌溉与装备作业；装备作业完成前后复检并受同一事务保护。"""
         if self.physical is None:
             raise OperationRejected("UNSUPPORTED_SEASON_OPERATION")
+        if name == "observe_stand_range":
+            stand_backend = self.season_backend
+            if not isinstance(stand_backend, StandRepairBackend):
+                raise OperationRejected("STAND_REPAIR_UNAVAILABLE")
+            return {"receipt": {"observations": stand_backend.observe_stand(stand_backend.indices(args)),
+                                "time": self.now.isoformat()}}
+        if name in ("scout_biotic", "treat_biotic"):
+            biology = self.season_backend
+            if not isinstance(biology, BioticManagementBackend):
+                raise OperationRejected("BIOTIC_MANAGEMENT_UNAVAILABLE")
+            selected = biology.indices(args)
+            if name == "scout_biotic":
+                used, queued = biology.protection_ledger()
+                return {"receipt": {"observations": biology.observe_biotic(selected),
+                                    "time": self.now.isoformat(),
+                                    "pending_ridges": [i for i in selected if i in queued],
+                                    "protection_remaining_units": self.season_config.plant_protection_units - used}}
+            used = biology.queue_biotic_treatment(selected, args["kind"])
+            return {"receipt": {"protection_used_units": used, "kind": args["kind"],
+                                "settlement": "next_local_midnight"}}
+        if name in ("observe_surface_water", "drain_surface"):
+            backend = self.season_backend
+            if not isinstance(backend, SurfaceDrainageBackend):
+                raise OperationRejected("SURFACE_DRAINAGE_UNSUPPORTED")
+            surface_ids = backend.indices(args)
+            if name == "observe_surface_water":
+                return {"receipt": {"observations": backend.surface_water_observation(surface_ids),
+                                    "time": self.now.isoformat()}}
+            amounts = backend.drain_surface(surface_ids, args["max_depth_mm"])
+            total = sum(amounts.values())
+            return {"receipt": {"drained": [{"ridge_id": i, "depth_mm": mm} for i, mm in amounts.items()],
+                                "field_average_mm": total / self.season_config.ridge_count,
+                                "volume_m3": self.scenario.farm.volume_m3(total / self.season_config.ridge_count)}}
+        if name == "observe_seedbed_range":
+            return {"receipt": self._seedbed_ready(args, check_plant=False)}
         if name in ("inspect_crop", "observe_soil_range"):
             ids: Iterable[int] = self.season_backend.indices(args)
             rows: Sequence[Mapping[str, Any]] = (
@@ -333,6 +385,8 @@ class Runtime:
                     for row in rows
                 ]
             return {"receipt": {"observations": rows, "time": self.now.isoformat()}}
+        if name == "inspect_dryer":
+            return {"receipt": self.physical.dryer_observation()}
         if name == "inspect_inventory":
             return {"receipt": self.physical.inventory()}
         if name == "irrigate_range":
@@ -355,6 +409,9 @@ class Runtime:
                     "settlement": "next_local_midnight",
                 }
             }
+        check_seedbed = name == "plant" and "observe_seedbed_range" in self.scenario.tools
+        if check_seedbed:
+            self._seedbed_ready(args, check_plant=True)
         plan = self.physical.plan(
             name, args, self.season_backend, self.weather[self.now.date().isoformat()]
         )
@@ -364,6 +421,8 @@ class Runtime:
         job = ScheduledJob(name, self.now.isoformat(), plan["duration_hours"], cause)
         self._emit("job_scheduled", asdict(job), cause)
         self._advance_time({"hours": job.duration_hours}, cause)
+        if check_seedbed:
+            self._seedbed_ready(args, check_plant=True)
         receipt = self.physical.execute(
             name, args, self.season_backend, self.weather[self.now.date().isoformat()]
         )
@@ -567,6 +626,11 @@ class Runtime:
         used = pending = 0.0
         settled_inputs = dict(spec.prefix_irrigation)
         season_inputs = []
+        surface_drains: dict[int, float] = {}
+        protection_used = 0
+        pending_protection: dict[int, str] = {}
+        replanted_sites: dict[int, int] = {}
+        dryer_history: list[str] = []
         prepared, planted, harvested, seeds_used = set(), set(), set(), 0
         errors, observations, first, last, terminated = 0, [], None, None, False
         request = None
@@ -659,6 +723,7 @@ class Runtime:
                     )
                     settled_inputs[body["day"]] = pending
                     pending = 0.0
+                    pending_protection.clear()
                     clock = stamp
                 elif event.kind == "time_advanced":
                     if (
@@ -782,6 +847,42 @@ class Runtime:
                             elif name != "harvest":
                                 entry["depth"] = args["depth_mm"]
                             season_inputs.append(entry)
+                        if name in ("dry_grain", "store_grain", "repair_dryer"):
+                            dryer_history.append(name)
+                        if name == "replant_gaps":
+                            receipt = data["receipt"]
+                            filled = receipt["filled_sites"]
+                            sites = {row["ridge_id"]: row["seeds"] for row in filled}
+                            if (list(sites) != list(self.season_backend.indices(args))
+                                or len(sites) != len(filled)
+                                or any(type(count) is not int or count <= 0 for count in sites.values())
+                                or sites.keys() & replanted_sites.keys()
+                                or sum(sites.values()) != receipt["seeds_used"]):
+                                raise ValueError("Invalid replant site or seed ledger")
+                            replanted_sites.update(sites)
+                            seeds_used += receipt["seeds_used"]
+                        if name == "treat_biotic":
+                            receipt = data["receipt"]
+                            treated_ids = self.season_backend.indices(args)
+                            if receipt != {"protection_used_units": len(treated_ids), "kind": args["kind"],
+                                           "settlement": "next_local_midnight"} or any(i in pending_protection for i in treated_ids):
+                                raise ValueError("Invalid or duplicated crop protection receipt")
+                            pending_protection.update({i: args["kind"] for i in treated_ids})
+                            protection_used += len(treated_ids)
+                        if name == "drain_surface":
+                            receipt = data["receipt"]
+                            rows = receipt["drained"]
+                            drains = {row["ridge_id"]: row["depth_mm"] for row in rows}
+                            if list(drains) != list(self.season_backend.indices(args)) or len(rows) != len(drains):
+                                raise ValueError("Drainage receipt targets differ from the request")
+                            total = 0.0
+                            for i, mm in drains.items():
+                                total += finite(mm, "managed surface outflow", 0, args["max_depth_mm"])
+                                surface_drains[i] = surface_drains.get(i, 0.0) + mm
+                            field_mm = total / self.season_config.ridge_count
+                            if (total <= 0 or receipt["field_average_mm"] != field_mm
+                                or receipt["volume_m3"] != spec.farm.volume_m3(field_mm)):
+                                raise ValueError("Inconsistent drainage receipt")
                         if name == "observe_soil":
                             if (
                                 self._state_time(data["time"]) != stamp
@@ -857,6 +958,18 @@ class Runtime:
                 or seeds_used != self.season_physical.state["seeds_used"]
             ):
                 raise ValueError("Field operations disagree with restored object states")
+            self.season_physical.validate_dryer_history(dryer_history)
+        if isinstance(self.backend, StandRepairBackend) and self.backend.replant_ledger() != replanted_sites:
+            raise ValueError("Replanted cohorts disagree with event receipts")
+        if isinstance(self.backend, BioticManagementBackend) and self.backend.protection_ledger() != (
+            protection_used, pending_protection
+        ):
+            raise ValueError("Crop protection state disagrees with event receipts")
+        if isinstance(self.backend, SurfaceDrainageBackend) and any(
+            not isclose(amount, surface_drains.get(i, 0.0), abs_tol=1e-9)
+            for i, amount in enumerate(self.backend.managed_surface_drains())
+        ):
+            raise ValueError("Surface drainage state disagrees with event receipts")
         forcing = [day for day in spec.weather if day.day < self.now.date().isoformat()]
         if self.backend_name == "wofost" and spec.season:
             from fairy.acps.backends.biology.wofost.season import WofostSeasonBackend

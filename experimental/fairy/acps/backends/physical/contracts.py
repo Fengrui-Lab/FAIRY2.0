@@ -30,6 +30,15 @@ class StoredBatch(GrainBatch):
     moisture: float
 
 
+class DryerState(TypedDict):
+    """Batch-triggered fault state owned by the physical equipment ledger."""
+
+    trailer_dried: bool
+    dried_batches_stored: int
+    fault_active: bool
+    repaired: bool
+
+
 class PhysicalState(TypedDict):
     """唯一装备/物料账本；单位为kg、L、kWh，battery为百分比。"""
 
@@ -48,6 +57,7 @@ class PhysicalState(TypedDict):
     harvest_loss_dry_kg: float
     harvest_loss_water_kg: float
     removed_water_kg: float
+    dryer: DryerState | None
 
 
 COMPONENTS: Final[tuple[Literal["dry_kg", "water_kg"], ...]] = ("dry_kg", "water_kg")

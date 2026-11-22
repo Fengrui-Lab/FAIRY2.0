@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "calendar_id": "hn58_synthetic_normal_calendar_v1",
-  "baseline_fingerprint": "decebcd6bb3ce9c0c586f51faa1d13ca4e12351b8c994f15c8a2a7fa8f97d6f0",
+  "baseline_fingerprint": "6e6caa612e8779af040348826c8d6326f5ee029f21a6a2b90df0333a8f8f5b4c",
   "template_fingerprint": "6916230f0edc552988f34afc0c8f11c89c8b48fdd251ded9ea93bb650d4eae5c",
   "reference_backend": "native",
   "capabilities": {
     "backend_id": "native",
-    "model": "ridge_water_rue_soybean",
-    "version": "2",
+    "model": "fairy_legacy_soil_canopy_soybean",
+    "version": "6",
     "crops": [
       "soybean"
     ],
@@ -15,7 +15,11 @@
       "irrigate",
       "full_season",
       "plant",
-      "harvest"
+      "harvest",
+      "seedbed_observation",
+      "surface_drainage",
+      "biotic_management",
+      "stand_repair"
     ],
     "timestep": "local_day"
   },
@@ -31,10 +35,13 @@
     "R8": "2026-07-24"
   },
   "process_files_sha256": {
-    "fairy/acps/backends/biology/native/season.py": "dd08252561c1869c7d350761170fa3ec763fe2f97d842442530cde0f07d94b4b",
-    "fairy/acps/backends/physical/native/backend.py": "2360268fc16ee7f85014096586818ca726371cc28b12211313e1ee9ad9435798",
+    "fairy/acps/backends/biology/native/season.py": "151ff71d9a8fb04b9c097a09c8d38c6dc5bfa77aef7e3efd7a1574981ca83813",
+    "fairy/acps/backends/biology/native/soil_engine.py": "2d2fc8776769f7afc3b54d16ced9cb923bdca9bc31005df4ade59ca1bb428ba3",
+    "fairy/acps/backends/biology/native/canopy_biomass_engine.py": "1a31a063079a0caba3bf3219e8a1447c6e3d03896dfc7cc739fb4ff178a89531",
+    "fairy/acps/backends/biology/native/biotic_pressure_engine.py": "f7bac942f2a70dc0f2a89d6d7af2eb3a010a042620397a1917bf7b38b41878fa",
+    "fairy/acps/backends/physical/native/backend.py": "4b8a174757f9c84b5f3e4723307264d53efda02aa0e609bd195c8a3c7a754a8e",
     "fairy/acps/ontology/crops/lib/soybean.py": "7bc572dbcf0664b78bd0fd30e5c2e0ed6235c13afc4f4b26443e6ef0db7a0cc0",
-    "fairy/events/session.py": "3485d22dd0ab107eafef35db91a5cc2f2c4414dbda1677d80cd1a1f4bdbd7089",
-    "evaluate/scenarios/season.py": "d84736ff4fb5d140f73ff8d3c0aa97613975a0915e6a7b397635a9f6f3a387c1"
+    "fairy/events/session.py": "86bed2c9a7817eb1571ab6740bc2dbde0ba8cfc80d743dba18d80cddd95b1369",
+    "evaluate/scenarios/season.py": "d8fc1063918e25043f642b385babbc568e37cc9a85b889b5c48f2b5622fb6a41"
   }
 }

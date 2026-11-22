@@ -24,6 +24,9 @@ from evaluate.scenarios.disturbances import Drought, STAGES
 REFERENCE_PATH = Path(__file__).parent / "lib/l3/hn58_normal_reference.json"
 PROCESS_FILES = (
     "fairy/acps/backends/biology/native/season.py",
+    "fairy/acps/backends/biology/native/soil_engine.py",
+    "fairy/acps/backends/biology/native/canopy_biomass_engine.py",
+    "fairy/acps/backends/biology/native/biotic_pressure_engine.py",
     "fairy/acps/backends/physical/native/backend.py",
     "fairy/acps/ontology/crops/lib/soybean.py",
     "fairy/events/session.py",
@@ -36,7 +39,9 @@ def process_files() -> dict[str, str]:
     result = {}
     for name in PROCESS_FILES:
         package, relative = name.split("/", 1)
-        result[name] = hashlib.sha256(files(package).joinpath(relative).read_bytes()).hexdigest()
+        result[name] = hashlib.sha256(
+            files(package).joinpath(relative).read_bytes()
+        ).hexdigest()
     return result
 
 
@@ -86,8 +91,12 @@ def compile_scenario(
     normal: ScenarioSpec, disturbances: Sequence[Drought], *, scenario_id: str
 ) -> ScenarioSpec:
     """按冻结参考阶段日历编译降雨扰动；不依候选动作重新排期。"""
-    if not isinstance(disturbances, tuple) or any(type(d) is not Drought for d in disturbances):
-        raise ValueError("Only an immutable tuple of supported Drought declarations is accepted")
+    if not isinstance(disturbances, tuple) or any(
+        type(d) is not Drought for d in disturbances
+    ):
+        raise ValueError(
+            "Only an immutable tuple of supported Drought declarations is accepted"
+        )
     if not isinstance(normal.construction_json, str):
         raise ValueError("Compile from a declared normal baseline")
     manifest = json.loads(normal.construction_json)
@@ -101,7 +110,9 @@ def compile_scenario(
     events = []
     for disturbance in disturbances:
         if disturbance.target_id != normal.farm.plot_id:
-            raise ValueError("First-round drought supports the whole declared plot only")
+            raise ValueError(
+                "First-round drought supports the whole declared plot only"
+            )
         assert reference is not None  # 非空扰动已加载并验证冻结日历。
         starts = reference["stage_starts"]
         start = date.fromisoformat(starts[disturbance.stage]) + timedelta(
@@ -112,7 +123,11 @@ def compile_scenario(
         if end >= date.fromisoformat(starts[next_stage]):
             raise ValueError("Drought exceeds the reference stage window")
         events.append(
-            {**asdict(disturbance), "start_day": start.isoformat(), "end_day": end.isoformat()}
+            {
+                **asdict(disturbance),
+                "start_day": start.isoformat(),
+                "end_day": end.isoformat(),
+            }
         )
     events.sort(key=lambda e: (e["start_day"], e["event_id"]))
     occupied = set()
@@ -125,7 +140,9 @@ def compile_scenario(
                         "Overlapping rainfall modifiers require an explicit merge rule"
                     )
                 occupied.add(day.day)
-                weather[i] = replace(day, rain_mm=day.rain_mm * event["rainfall_factor"])
+                weather[i] = replace(
+                    day, rain_mm=day.rain_mm * event["rainfall_factor"]
+                )
     manifest.update(
         events=events,
         reference_calendar=reference,
@@ -148,7 +165,8 @@ def validate_reference(reference: JsonObject, manifest: JsonObject) -> None:
         reference.get("schema") != 1
         or reference.get("reference_backend") != "native"
         or reference.get("baseline_fingerprint") != manifest["baseline_fingerprint"]
-        or reference.get("template_fingerprint") != fingerprint(manifest["management_template"])
+        or reference.get("template_fingerprint")
+        != fingerprint(manifest["management_template"])
         or reference.get("process_files_sha256") != process_files()
     ):
         raise ValueError(
@@ -166,7 +184,17 @@ def validate_construction(spec: ScenarioSpec) -> None:
     if not isinstance(spec.construction_json, str) or spec.task_type != "full_season":
         raise ValueError("Construction metadata requires a full-season declaration")
     manifest = json.loads(spec.construction_json)
-    if manifest.get("schema") == 2 and manifest.get("kind") == "wofost_proxy_fixed_weather":
+    if manifest.get("kind") == "historical":
+        from evaluate.scenarios.historical_scenarios import (
+            validate_historical_construction,
+        )
+
+        validate_historical_construction(spec, manifest)
+        return
+    if (
+        manifest.get("schema") == 2
+        and manifest.get("kind") == "wofost_proxy_fixed_weather"
+    ):
         from evaluate.scenarios.lib.l3.soybean_wofost import validate_proxy_construction
 
         validate_proxy_construction(spec, manifest)
@@ -194,7 +222,10 @@ def validate_construction(spec: ScenarioSpec) -> None:
     if fingerprint(base_inputs(spec)) != manifest["base_inputs_fingerprint"]:
         raise ValueError("Normal constraints or initial conditions changed")
     profile = manifest["normal_profile"]
-    if profile != {"kind": "synthetic_constant_v1", "parameters": NORMAL_WEATHER_PARAMETERS}:
+    if profile != {
+        "kind": "synthetic_constant_v1",
+        "parameters": NORMAL_WEATHER_PARAMETERS,
+    }:
         raise ValueError("Unsupported normal forcing profile")
     normal = normal_weather(spec.sowing_date, spec.deadline[:10], profile["parameters"])
     if weather_fingerprint(normal) != manifest["normal_weather_fingerprint"]:
@@ -209,7 +240,10 @@ def validate_construction(spec: ScenarioSpec) -> None:
     if fingerprint(base) != manifest["baseline_fingerprint"]:
         raise ValueError("Normal declaration identity mismatch")
     events, reference = manifest["events"], manifest["reference_calendar"]
-    if type(events) is not list or fingerprint(events) != manifest["recipe_fingerprint"]:
+    if (
+        type(events) is not list
+        or fingerprint(events) != manifest["recipe_fingerprint"]
+    ):
         raise ValueError("Invalid disturbance recipe fingerprint")
     if events != sorted(events, key=lambda e: (e["start_day"], e["event_id"])):
         raise ValueError("Compiled events must be ordered")
@@ -227,9 +261,9 @@ def validate_construction(spec: ScenarioSpec) -> None:
         if declaration.target_id != spec.farm.plot_id or declaration.event_id in ids:
             raise ValueError("Duplicate disturbance or unsupported target")
         ids.add(declaration.event_id)
-        start = date.fromisoformat(reference["stage_starts"][declaration.stage]) + timedelta(
-            days=declaration.offset_days
-        )
+        start = date.fromisoformat(
+            reference["stage_starts"][declaration.stage]
+        ) + timedelta(days=declaration.offset_days)
         end = start + timedelta(days=declaration.duration_days - 1)
         next_stage = (STAGES + ("R8",))[(STAGES + ("R8",)).index(declaration.stage) + 1]
         if (
@@ -243,7 +277,9 @@ def validate_construction(spec: ScenarioSpec) -> None:
             if day in factors or day not in {w.day for w in normal}:
                 raise ValueError("Conflicting or out-of-range forcing")
             factors[day] = declaration.rainfall_factor
-    expected = tuple(replace(w, rain_mm=w.rain_mm * factors.get(w.day, 1)) for w in normal)
+    expected = tuple(
+        replace(w, rain_mm=w.rain_mm * factors.get(w.day, 1)) for w in normal
+    )
     if (
         expected != spec.weather
         or expected != spec.public_weather
@@ -257,9 +293,22 @@ def forcing_audit(spec: ScenarioSpec, day: str) -> JsonObject | None:
     if spec.construction_json is None:
         return None
     manifest = json.loads(spec.construction_json)
+    if manifest.get("kind") == "historical":
+        source = manifest["document"]["environment"]["weather"]
+        return {
+            "construction_fingerprint": fingerprint(manifest),
+            "archive_fingerprint": source["archive_fingerprint"],
+            "disturbance_ids": [
+                f"biotic:{kind}:{first}-{last}:{day}"
+                for date_key, first, last, kind, _ in (spec.season.biotic_outbreaks if spec.season else ())
+                if date_key == day
+            ],
+        }
     return {
         "construction_fingerprint": fingerprint(manifest),
         "disturbance_ids": [
-            e["event_id"] for e in manifest["events"] if e["start_day"] <= day <= e["end_day"]
+            e["event_id"]
+            for e in manifest["events"]
+            if e["start_day"] <= day <= e["end_day"]
         ],
     }

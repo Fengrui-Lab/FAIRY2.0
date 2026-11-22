@@ -23,6 +23,60 @@
       "current_asset_fingerprint": "a0ad184f65f22f5117282d18647f45142035d3d885e6748c03e4c7f58c01165e",
       "status": "machine_schema_and_current_source_checked",
       "notes": "Original model extraction identity is preserved above; this entry only rebinds unchanged lifecycle content to the reviewed source version."
+    },
+    {
+      "method": "native_legacy_process_port_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "a0ad184f65f22f5117282d18647f45142035d3d885e6748c03e4c7f58c01165e",
+      "current_asset_fingerprint": "bf89f6af4399e356c98c0743ca21d3684b1ea389ea6e250ccf78d8e56563bf95",
+      "notes": "The operational phase cues remain valid with the new soil and canopy kernels; no old numerical policy was requalified."
+    },
+    {
+      "method": "cold_seedbed_optional_capability_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "bf89f6af4399e356c98c0743ca21d3684b1ea389ea6e250ccf78d8e56563bf95",
+      "current_asset_fingerprint": "ec7ff0254c43774e850b062389d0b823a51df1464ed0c5603130a2b6d7cf0ba7",
+      "notes": "Revalidated the original management scenario contract and sources. The opt-in cold-spring tool is outside this knowledge bundle."
+    },
+    {
+      "method": "optional_surface_drainage_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "ec7ff0254c43774e850b062389d0b823a51df1464ed0c5603130a2b6d7cf0ba7",
+      "current_asset_fingerprint": "1a70924785132d4ea7307a07aa9b9aa2ca60f90ee4423a26acc857fa72bc3aac",
+      "notes": "The original knowledge contract was checked on the normal scenario. The new surface tools only apply to the declared drainage scenario."
+    },
+    {
+      "method": "optional_biotic_pressure_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "1a70924785132d4ea7307a07aa9b9aa2ca60f90ee4423a26acc857fa72bc3aac",
+      "current_asset_fingerprint": "8dcad0ff9784192abc12537853f231d87cb2f3e8e05f86ab13a206d8199a14a0",
+      "notes": "The normal scenario retains the original management tools; biotic scouting is enabled separately."
+    },
+    {
+      "method": "optional_stand_repair_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "8dcad0ff9784192abc12537853f231d87cb2f3e8e05f86ab13a206d8199a14a0",
+      "current_asset_fingerprint": "cd90b4b8811247cd43427bb14631c97e9281f848abedfdc2fafa394daf36c176",
+      "notes": "The normal scenario uses the previous public operation set. Stand repair is opt-in."
+    },
+    {
+      "method": "optional_dryer_recovery_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "cd90b4b8811247cd43427bb14631c97e9281f848abedfdc2fafa394daf36c176",
+      "current_asset_fingerprint": "1b319d0c060eb6af25af12d23b4834f1817e09320cc5c5b6b5225825d57e1223",
+      "notes": "The forecast-enabled normal scenario retains its public tools and management stages. The modeled dryer failure is opt-in."
     }
   ]
 }

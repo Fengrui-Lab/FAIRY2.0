@@ -10,6 +10,7 @@ from typing import (
     TYPE_CHECKING,
     TypeAlias,
     TypedDict,
+    runtime_checkable,
     overload,
 )
 
@@ -49,7 +50,13 @@ class WeatherDay:
         date.fromisoformat(self.day)
         finite(self.tmin_c, "tmin_c", -60, 60)
         finite(self.tmax_c, "tmax_c", self.tmin_c, 60)
-        for name in ("rain_mm", "radiation_mj_m2", "wind_ms", "vapor_pressure_hpa", "et0_mm"):
+        for name in (
+            "rain_mm",
+            "radiation_mj_m2",
+            "wind_ms",
+            "vapor_pressure_hpa",
+            "et0_mm",
+        ):
             finite(getattr(self, name), name, 0)
 
 
@@ -116,6 +123,85 @@ class SoilRidgeObservation(TypedDict):
 
     ridge_id: int
     root_vwc: float
+
+
+class SeedbedObservation(TypedDict):
+    """Modeled topsoil temperature and moisture at the selected ridge."""
+
+    ridge_id: int
+    seedbed_temperature_c: float
+    seedbed_vwc: float | None
+    minimum_temperature_c: float
+    temperature_ready: bool
+
+
+@runtime_checkable
+class SeedbedBiologyBackend(Protocol):
+    """Optional topsoil capability used by explicit planting-window scenarios."""
+
+    def seedbed_observation(
+        self, indices: Iterable[int]
+    ) -> list[SeedbedObservation]: ...
+
+
+class SurfaceWaterObservation(TypedDict):
+    """Public standing water and elapsed crop exposure on one ridge."""
+
+    ridge_id: int
+    standing_water_mm: float
+    crop_waterlogging_days: int
+    drainage_enabled: bool
+
+
+@runtime_checkable
+class SurfaceDrainageBackend(Protocol):
+    """Opt-in surface water projection and managed outflow."""
+
+    def surface_water_observation(
+        self, indices: Iterable[int]
+    ) -> list[SurfaceWaterObservation]: ...
+    def drain_surface(
+        self, indices: Iterable[int], max_depth_mm: float
+    ) -> dict[int, float]: ...
+    def managed_surface_drains(self) -> tuple[float, ...]: ...
+
+
+class BioticObservation(TypedDict):
+    """Visible simulated scouting indices and remaining treatment protection time."""
+
+    ridge_id: int
+    insect_pressure: float | None
+    disease_pressure: float | None
+    insect_protection_days: int
+    disease_protection_days: int
+
+
+@runtime_checkable
+class BioticManagementBackend(Protocol):
+    """Optional field scouting and day-settled crop protection."""
+
+    def observe_biotic(self, indices: Iterable[int]) -> list[BioticObservation]: ...
+    def queue_biotic_treatment(self, indices: Iterable[int], kind: str) -> int: ...
+    def protection_ledger(self) -> tuple[int, dict[int, str]]: ...
+
+
+class StandObservation(TypedDict):
+    """Visible emerged stand, relative to nominal seed sites."""
+
+    ridge_id: int
+    established_fraction: float | None
+    original_stage: str
+    replant_stage: str | None
+
+
+@runtime_checkable
+class StandRepairBackend(Protocol):
+    """Optional stand scouting and repair against a recorded partial placement gap."""
+
+    def observe_stand(self, indices: Iterable[int]) -> list[StandObservation]: ...
+    def plan_replant(self, indices: Iterable[int]) -> dict[int, int]: ...
+    def replant(self, indices: Iterable[int]) -> dict[int, int]: ...
+    def replant_ledger(self) -> dict[int, int]: ...
 
 
 class SurveyObservation(TypedDict, total=False):
@@ -195,8 +281,12 @@ class SeasonBiologyBackend(BiologyBackend, Protocol):
         ...
 
     def field_observation(self, indices: Iterable[int]) -> list[CropObservation]: ...
-    def soil_observation(self, indices: Iterable[int]) -> list[SoilRidgeObservation]: ...
-    def survey(self, indices: Iterable[int], thermal: bool = False) -> list[SurveyObservation]: ...
+    def soil_observation(
+        self, indices: Iterable[int]
+    ) -> list[SoilRidgeObservation]: ...
+    def survey(
+        self, indices: Iterable[int], thermal: bool = False
+    ) -> list[SurveyObservation]: ...
 
 
 BackendFactory: TypeAlias = Callable[[FarmSpec, SoybeanSpec, str], BiologyBackend]
@@ -268,11 +358,19 @@ def make_backend(
 ) -> WofostBackend: ...
 @overload
 def make_backend(
-    name: Literal["native"], farm: FarmSpec, crop: SoybeanSpec, sowing_date: str, season: SeasonSpec
+    name: Literal["native"],
+    farm: FarmSpec,
+    crop: SoybeanSpec,
+    sowing_date: str,
+    season: SeasonSpec,
 ) -> NativeSeasonBackend: ...
 @overload
 def make_backend(
-    name: Literal["wofost"], farm: FarmSpec, crop: SoybeanSpec, sowing_date: str, season: SeasonSpec
+    name: Literal["wofost"],
+    farm: FarmSpec,
+    crop: SoybeanSpec,
+    sowing_date: str,
+    season: SeasonSpec,
 ) -> WofostSeasonBackend: ...
 @overload
 def make_backend(
@@ -280,12 +378,20 @@ def make_backend(
 ) -> SeasonBiologyBackend: ...
 @overload
 def make_backend(
-    name: str, farm: FarmSpec, crop: SoybeanSpec, sowing_date: str, season: SeasonSpec | None = None
+    name: str,
+    farm: FarmSpec,
+    crop: SoybeanSpec,
+    sowing_date: str,
+    season: SeasonSpec | None = None,
 ) -> BiologyBackend: ...
 
 
 def make_backend(
-    name: str, farm: FarmSpec, crop: SoybeanSpec, sowing_date: str, season: SeasonSpec | None = None
+    name: str,
+    farm: FarmSpec,
+    crop: SoybeanSpec,
+    sowing_date: str,
+    season: SeasonSpec | None = None,
 ) -> BiologyBackend:
     """按显式名称与场景选择实现；不支持的组合拒绝，不自动降级。"""
     if season is not None:

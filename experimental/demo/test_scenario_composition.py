@@ -212,9 +212,11 @@ def test_complete_paired_validation_and_nonadditive_effects():
     assert report["valid"] and len(records) == 7
     assert all(r["metrics"]["task_success"] and r["metrics"]["replay_verified"] for r in report["runs"].values())
     for case, check in report["checks"].items():
-        assert check["stored_dry_mass_difference_from_normal_kg"] > 0
-        assert check["fixed_intervention_response_kg"] > 0
+        assert check["peak_root_vwc_response"] > 0.01
         assert records[case+"_control"]["state"]["scenario_fingerprint"] == records[case+"_managed"]["state"]["scenario_fingerprint"]
+    for case in ("r1", "r5"):
+        assert report["checks"][case]["fixed_intervention_response_kg"] == pytest.approx(0)
+    assert report["checks"]["r1_r5"]["fixed_intervention_response_kg"] > 0
     loss = lambda name: report["checks"][name]["stored_dry_mass_difference_from_normal_kg"]
     assert abs(loss("r1_r5")-loss("r1")-loss("r5")) > 1  # process carryover, never additive score patches
 

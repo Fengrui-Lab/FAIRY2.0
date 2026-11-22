@@ -15,9 +15,9 @@ from fairy.acps.ontology.farm.spec import FarmSpec
 from fairy.acps.ontology.contracts import OperationDefinition, OperationRejected, JsonObject
 from fairy.acps.ontology.infrastructure.soil_sensor import SoilSensor
 from fairy.acps.ontology.infrastructure.irrigation import IrrigationSystem
-from fairy.acps.ontology.service.weather import WeatherService
+from fairy.acps.ontology.service.weather import HistoricalWeatherService, WeatherService
 from fairy.events.operations import ADVANCE_TIME
-from fairy.acps.ontology.equipment.operations import SeasonProvider, PROVIDERS
+from fairy.acps.ontology.equipment.operations import SeasonProvider, SEASON_PROVIDERS
 
 ProviderObject: TypeAlias = (
     FarmSpec | SoilSensor | IrrigationSystem | WeatherService | SeasonProvider
@@ -81,10 +81,12 @@ def load_objects(spec: ScenarioSpec) -> Mapping[str, ProviderObject]:
             obj = SoilSensor(declaration)
         elif declaration.type_id == "irrigation_system":
             obj = IrrigationSystem(declaration)
-        elif declaration.type_id in PROVIDERS and spec.season is not None:
+        elif declaration.type_id in SEASON_PROVIDERS and spec.season is not None:
             obj = SeasonProvider(declaration)
         elif declaration.type_id == "weather_service":
             obj = WeatherService(declaration, spec.public_weather)
+        elif declaration.type_id == "historical_weather_service":
+            obj = HistoricalWeatherService(declaration, spec.public_weather)
         else:
             raise ValueError(f"Unsupported object type: {declaration.type_id}")
         objects[declaration.object_id] = obj

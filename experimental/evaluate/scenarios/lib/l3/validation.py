@@ -43,11 +43,12 @@ def validate_drought_challenge() -> tuple[JsonObject, dict[str, JsonObject]]:
             if treatment and today == "2026-07-20":
                 call("irrigate_range", start_ridge=22, end_ridge=43, depth_mm=4 * 64 / 22)
             call("advance_time", hours=24)
-        call("harvest", start_ridge=0, end_ridge=63)
-        call("unload")
-        if runtime.season_physical.moisture(runtime.season_physical.state["trailer"]) > 0.13:
-            call("dry_grain", target_moisture=0.13)
-        call("store_grain")
+        for first in range(0, 64, 8):
+            call("harvest", start_ridge=first, end_ridge=first + 7)
+            call("unload")
+            if runtime.season_physical.moisture(runtime.season_physical.state["trailer"]) > 0.13:
+                call("dry_grain", target_moisture=0.13)
+            call("store_grain")
         runtime.finish("scenario_validation")
         name = "irrigated" if treatment else "control"
         record = artifact(runtime)

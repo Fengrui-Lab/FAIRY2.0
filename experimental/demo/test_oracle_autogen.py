@@ -198,6 +198,9 @@ def test_training_variants_are_real_separate_inputs_and_same_public_feature_path
 
 def test_actual_ppo_training_has_changed_weights_and_loads(tmp_path):
     pytest.importorskip('sb3_contrib')
+    from torch import nn
+    from fairy.agents.models.numeric.irrigation import DOSES, FEATURES
+    from fairy.agents.models.numeric.modeling import IrrigationActorCriticPolicy
     from fairy.agents.models.numeric.training import train
     from fairy.agents.models.numeric.irrigation import PPOAdvisor
     from fairy.events.provenance import source_identity
@@ -205,6 +208,17 @@ def test_actual_ppo_training_has_changed_weights_and_loads(tmp_path):
     assert m['weight_l1_change']>0 and m['timesteps']>=128
     assert set(m['training_scenario_seeds']).isdisjoint(m['heldout_scenario_seeds'])
     advisor=PPOAdvisor(path,expected_source=source_identity()['fingerprint'])
+    policy = advisor.policy.policy
+    assert isinstance(policy, IrrigationActorCriticPolicy)
+    actor, critic = policy.mlp_extractor.policy_net, policy.mlp_extractor.value_net
+    for branch in (actor, critic):
+        assert [(layer.in_features, layer.out_features) for layer in branch if isinstance(layer, nn.Linear)] == [
+            (len(FEATURES), 32), (32, 32)
+        ]
+        assert sum(isinstance(layer, nn.Tanh) for layer in branch) == 2
+    assert actor[0].weight is not critic[0].weight
+    assert policy.action_net.out_features == len(DOSES)
+    assert policy.value_net.out_features == 1
     r=planted();a=advisor.advise(fresh(r));assert 0<=a['dose_mm']<=30
     path.write_bytes(path.read_bytes()+b'x')
     with pytest.raises(ValueError,match='fingerprint'):PPOAdvisor(path)
@@ -228,8 +242,8 @@ def test_shared_loop_full_season_services_are_not_physical_and_stub_is_not_exper
     for first in range(0,64,8):
         sensors();add('harvest',start_ridge=first,end_ridge=first+7)
         add('inspect_inventory');add('unload')
-    add('inspect_inventory');add('dry_grain',target_moisture=.13)
-    add('inspect_inventory');add('store_grain')
+        add('inspect_inventory');add('dry_grain',target_moisture=.13)
+        add('inspect_inventory');add('store_grain')
     class Scripted:
         metadata={'kind':'scripted_integration_test_not_llm'}
         def decide(self,c):

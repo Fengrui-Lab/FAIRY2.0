@@ -13,8 +13,13 @@ from fairy.events.records import detached, fingerprint
 OBSERVATIONS = {
     "observe_soil",
     "observe_soil_range",
+    "observe_seedbed_range",
+    "observe_surface_water",
+    "scout_biotic",
+    "observe_stand_range",
     "inspect_crop",
     "inspect_inventory",
+    "inspect_dryer",
     "get_current_weather",
     "get_forecast",
     "survey_multispectral",
@@ -27,9 +32,13 @@ WORK = {
     "harvest",
     "unload",
     "dry_grain",
+    "repair_dryer",
     "store_grain",
     "irrigate",
     "irrigate_range",
+    "drain_surface",
+    "treat_biotic",
+    "replant_gaps",
 }
 
 

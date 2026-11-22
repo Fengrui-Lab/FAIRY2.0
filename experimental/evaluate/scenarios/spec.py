@@ -110,6 +110,10 @@ class ScenarioSpec:
             for z in self.season.hydraulic_zones
         ):
             raise ValueError("Zone field capacity must be between wilting and saturation")
+        if self.season and any(
+            event_day not in expected[:-1] for event_day, *_ in self.season.biotic_outbreaks
+        ):
+            raise ValueError("Biotic outbreaks must occur within the season")
         if len({day for day, _ in self.prefix_irrigation}) != len(self.prefix_irrigation):
             raise ValueError("Duplicate prefix irrigation day")
         for day, amount in self.prefix_irrigation:
@@ -167,11 +171,7 @@ class ScenarioSpec:
         """从可信JSON字段重建声明/事件并验证结构，不执行模型或农事。"""
         value = dict(value)
         if value.get("season") is not None:
-            value["season"] = dict(value["season"])
-            value["season"]["hydraulic_zones"] = tuple(
-                tuple(z) for z in value["season"].get("hydraulic_zones", ())
-            )
-            value["season"] = SeasonSpec(**value["season"])
+            value["season"] = SeasonSpec.from_dict(value["season"])
         value["farm"] = FarmSpec(**value["farm"])
         value["crop"] = SoybeanSpec(**value["crop"])
         value["weather"] = tuple(WeatherDay(**day) for day in value["weather"])

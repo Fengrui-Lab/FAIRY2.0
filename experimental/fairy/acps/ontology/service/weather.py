@@ -69,3 +69,29 @@ class WeatherService:
             "requested_days": days,
             "available_days": len(reports),
         }
+
+
+@dataclass(frozen=True)
+class HistoricalWeatherService(WeatherService):
+    """Expose completed historical days only, without treating hindsight as a forecast."""
+
+    operations: ClassVar[tuple[OperationDefinition, ...]] = (
+        OperationDefinition(
+            "get_current_weather",
+            "Read the completed prior local day's historical reanalysis. The current day and future forcing are not published.",
+            (),
+            CURRENT_WEATHER.results,
+            "read_only",
+        ),
+    )
+
+    def current(self, now: datetime) -> JsonObject:
+        completed = (now.date() - timedelta(days=1)).isoformat()
+        report = next((w for w in self.reports if w.day == completed), None)
+        if report is None:
+            raise OperationRejected("WEATHER_UNAVAILABLE")
+        return {
+            "weather": asdict(report),
+            "source": "historical_reanalysis",
+            "time": now.isoformat(),
+        }

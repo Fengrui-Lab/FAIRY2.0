@@ -1,6 +1,16 @@
 # Numerical irrigation model
 
-`irrigation.py` defines public feature order, masks and a frozen MaskablePPO adviser. `training.py` performs real optional CPU training and held-out evaluation. No weights or simulator are imported from WOFOSTGym.
+`modeling.py` defines `IrrigationActorCriticPolicy`, the trainable model used by
+MaskablePPO. It gives the actor and critic separate two-layer MLPs (32 → 32,
+Tanh), both reading the same public feature vector. The actor produces one
+logit per irrigation dose, with illegal actions masked by MaskablePPO; the
+critic predicts one scalar state value. To explore a different network, start
+here. Training records both branch widths and the activation from the model.
+
+`irrigation.py` defines the features, masks and frozen checkpoint adviser.
+`training.py` runs CPU training and held-out evaluation. No weights or simulator
+are imported from WOFOSTGym. Existing checkpoints remain tied to their recorded
+source fingerprints and should be replayed against the matching source.
 
 The dose vocabulary is 0, 5, 10, 20 and 30 mm over the full field. Zero is a genuine policy output; missing observations raise NEED_OBSERVATION. The trained model never executes work. Live LLM and training use the same feature extraction, dose semantics, resource masks, real tools and midnight settlement.
 

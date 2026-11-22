@@ -21,6 +21,7 @@ def train(
     import torch
     from sb3_contrib import MaskablePPO
     from evaluate.oracle.environment import IrrigationEnv
+    from .modeling import IrrigationActorCriticPolicy
 
     if type(timesteps) is not int or timesteps < 128:
         raise ValueError("At least 128 training timesteps required")
@@ -40,7 +41,7 @@ def train(
         done = terminated or truncated
     benchmark = time.monotonic() - started
     model = MaskablePPO(
-        "MlpPolicy",
+        IrrigationActorCriticPolicy,
         env,
         n_steps=128,
         batch_size=64,
@@ -48,7 +49,6 @@ def train(
         seed=seed,
         learning_rate=3e-4,
         device="cpu",
-        policy_kwargs={"net_arch": [32, 32]},
         verbose=0,
     )
     before = {k: v.detach().clone() for k, v in model.policy.state_dict().items()}
@@ -119,7 +119,9 @@ def train(
             "batch_size": 64,
             "n_epochs": 4,
             "learning_rate": 3e-4,
-            "policy_hidden_units": [32, 32],
+            "policy_hidden_units": list(model.policy.net_arch["pi"]),
+            "value_hidden_units": list(model.policy.net_arch["vf"]),
+            "activation": model.policy.activation_fn.__name__,
             "device": "cpu",
         },
         training_variation={
