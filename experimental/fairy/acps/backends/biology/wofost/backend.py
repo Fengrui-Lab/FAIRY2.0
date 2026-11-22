@@ -13,10 +13,14 @@ from fairy.acps.ontology.contracts import JsonObject
 import copy
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from fairy.acps.backends.biology.contracts import BackendCapabilities, SoilObservation, WeatherDay
+from fairy.acps.backends.biology.contracts import (
+    BackendCapabilities,
+    SoilObservation,
+    WeatherDay,
+)
 from fairy.acps.ontology.farm.spec import finite
 
 DATA = Path(__file__).parent
@@ -42,6 +46,14 @@ VARIABLES = (
 )
 
 
+@dataclass(frozen=True)
+class WaterStressDiagnostic:
+    """Offline label from PCSE rates before their daily integration clears them."""
+
+    day: str
+    rfws: float
+
+
 class WofostBackend(BiologyBackend):
     """单土柱PCSE6.0.13水分限制适配器。
 
@@ -59,7 +71,11 @@ class WofostBackend(BiologyBackend):
         try:
             import pcse
             import yaml
-            from pcse.base import ParameterProvider, WeatherDataContainer, WeatherDataProvider
+            from pcse.base import (
+                ParameterProvider,
+                WeatherDataContainer,
+                WeatherDataProvider,
+            )
             from pcse.input import WOFOST72SiteDataProvider
             from pcse.models import Wofost81_WLP_CWB
         except ImportError as exc:
@@ -67,8 +83,12 @@ class WofostBackend(BiologyBackend):
                 "WOFOST requires the optional dependency: pip install -e '.[wofost]'"
             ) from exc
         if pcse.__version__ != "6.0.13":
-            raise RuntimeError("WOFOST pilot requires PCSE 6.0.13; no fallback is permitted")
-        self.capabilities = BackendCapabilities("wofost", "Wofost81_WLP_CWB", pcse.__version__)
+            raise RuntimeError(
+                "WOFOST pilot requires PCSE 6.0.13; no fallback is permitted"
+            )
+        self.capabilities = BackendCapabilities(
+            "wofost", "Wofost81_WLP_CWB", pcse.__version__
+        )
         self.farm, self.crop, self.sowing_date = farm, crop, sowing_date
         self.bare = bare
         raw = (DATA / "soybean.yaml").read_bytes()
@@ -78,7 +98,9 @@ class WofostBackend(BiologyBackend):
         document = yaml.safe_load(raw)
         variety = document["CropParameters"]["Varieties"][crop.wofost_variety]
         parameters = {
-            key: copy.deepcopy(value[0]) for key, value in variety.items() if key != "Metadata"
+            key: copy.deepcopy(value[0])
+            for key, value in variety.items()
+            if key != "Metadata"
         }
         # No invented completion of missing cultivar coefficients.
         parameters["CO2"] = 420.0
@@ -137,7 +159,13 @@ class WofostBackend(BiologyBackend):
         if bare:
             # A later empty campaign keeps the soil simulation alive after crop maturity.
             agro = [
-                {start: {"CropCalendar": None, "TimedEvents": None, "StateEvents": None}},
+                {
+                    start: {
+                        "CropCalendar": None,
+                        "TimedEvents": None,
+                        "StateEvents": None,
+                    }
+                },
                 {start + timedelta(days=366): None},
             ]
         self.model = DeferredRates(
@@ -149,6 +177,7 @@ class WofostBackend(BiologyBackend):
         )
         self.journal: list[JsonObject] = []
         self.gross_irrigation_mm = 0.0
+        self.last_water_stress: WaterStressDiagnostic | None = None
 
     def _store_weather(self, weather: WeatherDay) -> None:
         """将公共SI天气单位转换为PCSE约定并写入该日天气容器。"""
@@ -174,7 +203,9 @@ class WofostBackend(BiologyBackend):
 
     def observe(self) -> SoilObservation:
         """读取公开观测；不推进业务时钟，不结算pending，也不更新生长。"""
-        return SoilObservation(self.farm.plot_id, round(float(self.model.get_variable("SM")), 3))
+        return SoilObservation(
+            self.farm.plot_id, round(float(self.model.get_variable("SM")), 3)
+        )
 
     def advance_day(self, weather: WeatherDay, irrigation_mm: float) -> WaterFlux:
         """消费恰好一个连续业务日，结算水量与适用的生长过程，返回mm通量/守恒残差。"""
@@ -187,7 +218,9 @@ class WofostBackend(BiologyBackend):
             raise ValueError("Non-contiguous forcing or terminated WOFOST model")
         self._store_weather(weather)
         tomorrow = day + timedelta(days=1)
-        self._store_weather(WeatherDay(**{**asdict(weather), "day": tomorrow.isoformat()}))
+        self._store_weather(
+            WeatherDay(**{**asdict(weather), "day": tomorrow.isoformat()})
+        )
         model.drv = model._get_driving_variables(day)
         if irrigation_mm:
             model._send_signal(
@@ -197,13 +230,22 @@ class WofostBackend(BiologyBackend):
             )
         before = self.audit()
         model.calculate_current_day()
+        self.last_water_stress = None
+        if model.crop is not None and model.crop.get_variable("STAGE") != "emerging":
+            # RFTRA combines water and oxygen effects. RFWS is water shortage alone.
+            evap = model.crop.evtra.etmodule.rates
+            rfws = float(evap.RFWS)
+            if evap.TRAMX > 1e-6 and 0.0 <= rfws <= 1.0:
+                self.last_water_stress = WaterStressDiagnostic(weather.day, rfws)
         model.run(days=1)
         if self.bare and model.flag_crop_finish:
             # Finish at the boundary that integrated maturity, before exposing
             # harvestability or computing another day's canopy transpiration.
             model._finish_cropsimulation(model.day)
         self.gross_irrigation_mm += irrigation_mm
-        self.journal.append({"weather": asdict(weather), "irrigation_mm": irrigation_mm})
+        self.journal.append(
+            {"weather": asdict(weather), "irrigation_mm": irrigation_mm}
+        )
         after = self.audit()
         # Whole soil profile + surface water, not only the moving root zone.
         delta_storage = after["profile_storage_mm"] - before["profile_storage_mm"]

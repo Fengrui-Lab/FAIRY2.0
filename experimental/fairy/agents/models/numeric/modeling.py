@@ -8,6 +8,7 @@ from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
 from torch import nn
 
 if TYPE_CHECKING:
+    from torch import Tensor
     from gymnasium.spaces import Space
     from stable_baselines3.common.type_aliases import Schedule
 
@@ -37,3 +38,18 @@ class IrrigationActorCriticPolicy(MaskableActorCriticPolicy):
         )
         policy_kwargs.setdefault("activation_fn", nn.Tanh)
         super().__init__(observation_space, action_space, lr_schedule, **policy_kwargs)
+
+
+class SoilWaterStressRegressor(nn.Module):
+    """Predict past-day water-deficit severity from an ordered public sensor window."""
+
+    hidden_units: ClassVar[int] = 16
+
+    def __init__(self, input_size: int) -> None:
+        super().__init__()
+        self.encoder = nn.GRU(input_size, self.hidden_units, batch_first=True)
+        self.head = nn.Sequential(nn.Linear(self.hidden_units, 1), nn.Sigmoid())
+
+    def forward(self, observations: Tensor) -> Tensor:
+        _, state = self.encoder(observations)
+        return self.head(state[0]).squeeze(-1)
