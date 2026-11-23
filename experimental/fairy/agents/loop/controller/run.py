@@ -5,6 +5,7 @@ from typing import Callable, Protocol, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from fairy.acps.ontology.contracts import OperationRequest, OperationResult
+    from fairy.agents.loop.controller.irrigation_dose import IrrigationDosing
     from fairy.agents.loop.context.public import PublicContext
     from fairy.agents.models.decision import PrivilegedAgent, PublicAgent
     from fairy.events.session import Runtime
@@ -45,6 +46,7 @@ def run_agent(
     max_history_turns: int = 8,
     max_protocol_errors: int = 3,
     context_extension: ContextExtension | None = None,
+    irrigation_dosing: IrrigationDosing | None = None,
 ) -> Runtime:
     """执行共享决策循环。
 
@@ -89,7 +91,19 @@ def run_agent(
     privileged = is_privileged(agent)
     if privileged and context_extension is not None:
         raise ValueError("Public agent services cannot wrap a privileged strategy")
+    if irrigation_dosing is not None and (privileged or context_extension is not None):
+        raise ValueError("Irrigation dosing requires an independent public agent")
+    if irrigation_dosing is not None:
+        from fairy.agents.loop.context.water import soil_profile
+
+        if "irrigate_range" not in runtime.scenario.tools:
+            raise ValueError("Irrigation dosing requires the spatial irrigation operation")
+        if irrigation_dosing.profiles != soil_profile(runtime.scenario):
+            raise ValueError("Dose policy soil parameters must match the scenario")
     actor = "oracle" if privileged else "agent"
+    dose_rejections = (
+        sum("rejected" in a for a in irrigation_dosing.attempts) if irrigation_dosing else 0
+    )
     try:
         for _ in range(max_steps):
             if wall_timeout is not None and monotonic() - started >= wall_timeout:
@@ -103,7 +117,7 @@ def run_agent(
             if context_extension is not None and context_extension.stop_reason:
                 runtime.finish(context_extension.stop_reason)
                 break
-            if runtime.tool_errors >= max_errors:
+            if runtime.tool_errors + dose_rejections >= max_errors:
                 runtime.finish("tool_error_budget")
                 break
             if protocol_errors >= max_protocol_errors:
@@ -129,6 +143,8 @@ def run_agent(
                     if context_extension is not None
                     else base_context
                 )
+                if irrigation_dosing is not None:
+                    context = irrigation_dosing.model_context(context)
                 decision = cast(PublicAgent, agent).decide(context)
             if decision.protocol_error:
                 protocol_errors += 1
@@ -149,19 +165,34 @@ def run_agent(
                 assert base_context is not None
                 if context_extension.intercept(decision.request, base_context):
                     continue
-            result = runtime.invoke(decision.request, actor=actor)
+            request = decision.request
+            resolved_dose = False
+            if irrigation_dosing is not None:
+                assert base_context is not None
+                resolved = irrigation_dosing.resolve(request, base_context, history)
+                if resolved is None:
+                    dose_rejections += 1
+                    if runtime.tool_errors + dose_rejections >= max_errors:
+                        runtime.finish("tool_error_budget")
+                        break
+                    continue
+                resolved_dose = resolved is not request
+                request = resolved
+            result = runtime.invoke(request, actor=actor)
             history = public_history(runtime)
+            if resolved_dose and irrigation_dosing is not None:
+                irrigation_dosing.record_result(result, history[-1]["event_seq"])
             if context_extension is not None:
                 assert base_context is not None
-                context_extension.observe(decision.request, result, history[-1], base_context)
+                context_extension.observe(request, result, history[-1], base_context)
             if hasattr(agent, "metadata"):
                 agent.metadata["progress_diagnostic"] = progress_diagnostic(history, runtime.now)
             if on_step is not None:
-                on_step(runtime, decision.request, result)
+                on_step(runtime, request, result)
             if evaluate(runtime)["task_success"]:
                 runtime.finish("task_success")
                 break
-            if runtime.tool_errors >= max_errors:
+            if runtime.tool_errors + dose_rejections >= max_errors:
                 runtime.finish("tool_error_budget")
                 break
         else:
@@ -176,4 +207,6 @@ def run_agent(
     finally:
         if context_extension is not None and hasattr(agent, "metadata"):
             agent.metadata["autogen"] = context_extension.snapshot()
+        if irrigation_dosing is not None and hasattr(agent, "metadata"):
+            agent.metadata["irrigation_dosing"] = irrigation_dosing.snapshot()
     return runtime

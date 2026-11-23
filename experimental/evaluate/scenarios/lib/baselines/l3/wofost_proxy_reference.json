@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "reference_backend": "wofost",
+  "cultivar": "Soybean_901_proxy",
+  "baseline_fingerprint": "907c23c2703b1bc52d2b12702e94a849d2a935785bfc5dbcf31877daa7c6c964",
+  "process_identity": {
+    "acps/backends/biology/wofost/season.py": "313d38e6cc33d660045e041aa9dcca8466fcbef9cd8f7fd0fb041f2b60a00ad8",
+    "acps/backends/biology/wofost/backend.py": "980cc9642bf0febaecfccdd7aadf3364159481b08b355042531c9dd52fe1d24f",
+    "acps/backends/biology/wofost/soybean.yaml": "b65cf37a478542d74564094dc0760c69bd3cda99452eb6e7d327e457f87ba9a9",
+    "acps/backends/physical/native/backend.py": "ec539271c8419850fe16231478f24f64a3d12baf73fec433b0b18f276b66b98d",
+    "events/session.py": "fd588813bca6c035cc0b3a8e8acf6b846384d7303539bf3721444df2062311dd",
+    "acps/backends/biology/contracts.py": "1d6f424aaade3642ee0cf363dbdc53d8639184c4749058230b988b556d5a1e92"
+  },
+  "phase_starts": {
+    "pre_emergence": "2026-05-05",
+    "vegetative": "2026-05-10",
+    "reproductive": "2026-06-03",
+    "mature": "2026-07-30"
+  },
+  "scope": "public coarse phases; no R1/R5 calibration"
+}

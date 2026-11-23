@@ -6,23 +6,17 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from evaluate.scenarios.historical_pilot import build, verify
-from evaluate.scenarios.historical_scenarios import (
-    call,
-    compile_season,
-    make_season_document,
-    next_day,
-    require,
-    run_season,
-)
-from evaluate.scenarios.historical_slices import (
+from evaluate.experiments.historical.cli import build, verify
+from evaluate.experiments.historical.operations import call, next_day, require, run_season
+from evaluate.scenarios.historical.compiler import compile_season, make_season_document
+from evaluate.experiments.historical.slices import (
     SliceRunner,
     advance_public,
     capture,
     run_public_slice,
     verify_slice,
 )
-from evaluate.scenarios.historical_weather import (
+from evaluate.scenarios.historical.weather import (
     DATASET,
     POINT,
     TIMEZONE,
@@ -118,6 +112,37 @@ def test_l3_and_slices_end_to_end(archive, tmp_path):
     )
 
 
+def test_authored_l3_separates_calendar_state_and_dryer_event(archive):
+    import json
+    from importlib.resources import files
+
+    from evaluate.scenarios.historical.source import (
+        compile_historical_source,
+        load_historical_source,
+    )
+
+    bound_archive = {**archive, "requested_point": list(POINT)}
+    integrated = load_historical_source("harbin_integrated_1995", bound_archive)
+    assert integrated["initial_state"]["season"]["initial_seed_count"] == 1_000_000
+    assert integrated["environment"]["timeline"][0]["effect"] == "record_only"
+    assert integrated["initial_state"]["season"]["dryer_failure_after_dried_batches"] == 0
+
+    path = files("evaluate").joinpath("scenarios/lib/l3/configs/harbin_dryer_failure_2016.json")
+    source = json.loads(path.read_text(encoding="utf-8"))
+    event, = source["evolution"]["equipment"]
+    event["trigger"]["count"] = 2
+    event["effect"]["repair_hours"] = 3.0
+    document = compile_historical_source(source, bound_archive)
+    assert not document["environment"]["timeline"]
+    assert document["initial_state"]["season"]["dryer_failure_after_dried_batches"] == 2
+    assert document["initial_state"]["season"]["dryer_repair_hours"] == 3.0
+    with pytest.raises(ValueError, match="Weather archive"):
+        compile_historical_source(source, {**bound_archive, "timezone": "UTC"})
+    source["evolution"]["crop_stage"] = [{"stage": "R5"}]
+    with pytest.raises(ValueError, match="Dynamic crop-stage triggers"):
+        compile_historical_source(source, bound_archive)
+
+
 def test_slice_scope_lineage_and_pending_recovery(archive):
     spec = compile_season(make_season_document(archive, 2000, "drought"), archive)
     ref, _ = run_season(spec, dose=("2000-07-20", 30))
@@ -193,10 +218,8 @@ def test_late_planting_changes_stage_not_weather(archive):
 def test_regional_declaration_binds_forcing_sources_on_restore(archive):
     from zoneinfo import ZoneInfo
 
-    from evaluate.scenarios.historical_scenarios import (
-        make_regional_document,
-        verify_season,
-    )
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.experiments.historical.operations import verify_season
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact, replay
 
@@ -253,11 +276,8 @@ def test_regional_declaration_binds_forcing_sources_on_restore(archive):
 
 
 def test_cold_planting_gate_uses_the_public_seedbed_and_is_transactional(archive):
-    from evaluate.scenarios.historical_scenarios import (
-        FULL,
-        make_regional_document,
-        verify_season,
-    )
+    from evaluate.experiments.historical.operations import FULL, verify_season
+    from evaluate.scenarios.historical.compiler import make_regional_document
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact
@@ -304,7 +324,8 @@ def test_cold_planting_gate_uses_the_public_seedbed_and_is_transactional(archive
 
 def test_flood_storage_conservation_and_drainage_receipts_survive_restore(archive):
     from copy import deepcopy
-    from evaluate.scenarios.historical_scenarios import make_regional_document, window
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.experiments.historical.operations import window
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact, replay
@@ -364,11 +385,8 @@ def test_flood_storage_conservation_and_drainage_receipts_survive_restore(archiv
 
 def test_biotic_treatment_is_private_until_settled_and_never_spends_twice(archive):
     from copy import deepcopy
-    from evaluate.scenarios.historical_scenarios import (
-        make_regional_document,
-        plant_prefix,
-        window,
-    )
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.experiments.historical.operations import plant_prefix, window
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact, replay
@@ -436,11 +454,8 @@ def test_partial_planter_gap_is_observed_after_emergence_and_repairs_only_missin
 ):
     from copy import deepcopy
     from math import ceil
-    from evaluate.scenarios.historical_scenarios import (
-        make_regional_document,
-        plant_prefix,
-        window,
-    )
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.experiments.historical.operations import plant_prefix, window
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact, replay
@@ -494,12 +509,8 @@ def test_partial_planter_gap_is_observed_after_emergence_and_repairs_only_missin
 def test_dryer_outage_after_a_stored_dried_batch_requires_service(archive):
     from copy import deepcopy
 
-    from evaluate.scenarios.historical_scenarios import (
-        grow_to_harvest,
-        make_regional_document,
-        move_to,
-        window,
-    )
+    from evaluate.experiments.historical.operations import grow_to_harvest, move_to, window
+    from evaluate.scenarios.historical.compiler import make_regional_document
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
     from fairy.events.artifacts import artifact, replay
@@ -563,7 +574,7 @@ def test_dryer_outage_after_a_stored_dried_batch_requires_service(archive):
 
 def test_historical_wofost_binds_proxy_and_preserves_historical_forcing(archive):
     pytest.importorskip("pcse")
-    from evaluate.scenarios.historical_scenarios import make_regional_document
+    from evaluate.scenarios.historical.compiler import make_regional_document
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
 
@@ -608,10 +619,8 @@ def test_historical_wofost_binds_proxy_and_preserves_historical_forcing(archive)
 
 def test_wofost_seedbed_uses_settled_weather_and_restores(archive):
     pytest.importorskip("pcse")
-    from evaluate.scenarios.historical_scenarios import (
-        FULL,
-        make_regional_document,
-    )
+    from evaluate.experiments.historical.operations import FULL
+    from evaluate.scenarios.historical.compiler import make_regional_document
     from evaluate.scenarios.season import SeasonSpec
     from fairy.acps.ontology.farm.spec import FarmSpec
 
@@ -653,7 +662,7 @@ def test_wofost_current_water_reaches_llm_payload_after_settlement_and_restore(a
     import json
     from types import SimpleNamespace as NS
 
-    from evaluate.scenarios.historical_scenarios import plant_prefix
+    from evaluate.experiments.historical.operations import plant_prefix
     from fairy.agents.loop.context.history import public_history
     from fairy.agents.loop.context.public import build_context
     from fairy.agents.loop.controller.run import run_agent
@@ -766,3 +775,227 @@ def test_wofost_current_water_reaches_llm_payload_after_settlement_and_restore(a
         ]["zones"][0]
         == refreshed
     )
+
+
+def test_named_grain_custody_and_interrupted_drying(archive, monkeypatch):
+    from copy import deepcopy
+
+    from evaluate.experiments.historical.operations import grow_to_harvest, window
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.scenarios.season import SeasonSpec
+    from fairy.acps.ontology.farm.spec import FarmSpec
+    from fairy.events.artifacts import artifact, replay
+
+    doc = make_regional_document(
+        archive,
+        region="batch_fixture",
+        start=date(1992, 5, 5),
+        end=date(1992, 10, 22),
+        kind="wet_harvest",
+        farm=FarmSpec(),
+        season=SeasonSpec(),
+        quota_mm=0,
+        grain_batches=True,
+    )
+    runtime, _ = grow_to_harvest(compile_season(doc, archive))
+    assert {"grain_trailer", "grain_dryer", "grain_warehouse"} <= {
+        row["type_id"] for row in runtime.public_objects()
+    }
+    first, second = [
+        require(call(runtime, "harvest", **window(bounds)))["receipt"]["batch"][
+            "batch_id"
+        ]
+        for bounds in ((0, 1), (2, 3))
+    ]
+    assert first != second
+    for key in (first, second):
+        require(
+            call(runtime, "unload_batch", batch_id=key, trailer_id="grain_trailer-1")
+        )
+    from fairy.agents.loop.context.public import build_context
+
+    # Reconstruct each lot from receipts even when no inventory or recent history is shown.
+    pending = build_context(runtime, [], max_chars=60000)["progress"]
+    assert pending["successful_storage_transfers"] == 0
+    assert [lot["batch_id"] for lot in pending["pending_grain_batches"]] == [
+        first,
+        second,
+    ]
+    assert pending["public_containers"]["amounts"]["combine"] == {
+        "dry_kg": 0.0,
+        "water_kg": 0.0,
+    }
+    before = runtime.export_state()
+    assert (
+        call(
+            runtime, "store_batch", batch_id=second, warehouse_id="grain_warehouse-1"
+        ).error
+        == "UNSAFE_STORAGE_MOISTURE"
+    )
+    assert (
+        call(
+            runtime, "dry_batch", batch_id=first, dryer_id="wrong", target_moisture=0.13
+        ).error
+        == "UNKNOWN_DRYER"
+    )
+
+    emit = runtime._emit
+
+    def interrupt(kind, payload, cause=None):
+        if kind == "job_completed" and payload["operation"] == "dry_batch":
+            raise KeyboardInterrupt()
+        return emit(kind, payload, cause)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(runtime, "_emit", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            call(
+                runtime,
+                "dry_batch",
+                batch_id=first,
+                dryer_id="grain_dryer-1",
+                target_moisture=0.13,
+            )
+    assert runtime.now.isoformat() == before["now"]
+    assert runtime.export_state()["physical_state"] == before["physical_state"]
+    runtime = Runtime.from_state(runtime.export_state())
+    receipt = require(
+        call(
+            runtime,
+            "dry_batch",
+            batch_id=first,
+            dryer_id="grain_dryer-1",
+            target_moisture=0.13,
+        )
+    )["receipt"]
+    assert receipt["removed_water_kg"] > 0
+    assert receipt["before"]["dry_kg"] == receipt["batch"]["dry_kg"]
+    require(
+        call(runtime, "store_batch", batch_id=first, warehouse_id="grain_warehouse-1")
+    )
+    assert (
+        call(
+            runtime, "store_batch", batch_id=first, warehouse_id="grain_warehouse-1"
+        ).error
+        == "BATCH_NOT_AT_SOURCE"
+    )
+    lots = runtime.season_physical.inventory()["grain_batches"]
+    assert [lot["location_id"] for lot in lots] == [
+        "grain_warehouse-1",
+        "grain_trailer-1",
+    ]
+    assert (
+        lots[1]["water_kg"] == before["physical_state"]["grain_batches"][1]["water_kg"]
+    )
+    progress = build_context(runtime, [], max_chars=60000)["progress"]
+    assert progress["successful_storage_transfers"] == 1
+    assert progress["pending_grain_batches"] == [
+        {
+            "batch_id": second,
+            "location_id": "grain_trailer-1",
+            "drying_completed": False,
+        }
+    ]
+    assert progress["public_containers"]["amounts"]["trailer"] == {
+        key: lots[1][key] for key in ("dry_kg", "water_kg")
+    }
+    assert progress["last_inventory_change_seq"] < runtime.events[-1].seq
+    require(call(runtime, "inspect_inventory"))
+    assert (
+        build_context(runtime, [], max_chars=60000)["progress"][
+            "successful_storage_transfers"
+        ]
+        == 1
+    )
+    tampered = deepcopy(runtime.export_state())
+    tampered["physical_state"]["grain_batches"][0]["location_id"] = "grain_trailer-1"
+    with pytest.raises(ValueError, match="Physical grain state disagrees"):
+        Runtime.from_state(tampered)
+    assert replay(artifact(runtime))[1]["replay_verified"]
+
+
+@pytest.mark.parametrize("backend", ["native", "wofost"])
+def test_harvest_checks_dryer_capacity_before_work_and_exposes_fitting_range(
+    archive, backend
+):
+    if backend == "wofost":
+        pytest.importorskip("pcse")
+    from evaluate.experiments.historical.operations import grow_to_harvest, window
+    from evaluate.scenarios.historical.compiler import make_regional_document
+    from evaluate.scenarios.season import SeasonSpec
+    from fairy.acps.ontology.farm.spec import FarmSpec
+    from fairy.agents.loop.context.history import public_history, progress_diagnostic
+    from fairy.agents.loop.context.public import build_context
+    from fairy.events.artifacts import artifact, replay
+    from fairy.events.records import fingerprint
+
+    doc = make_regional_document(
+        archive,
+        region="batch_capacity_fixture",
+        start=date(1992, 5, 5),
+        end=date(1992, 10, 22),
+        kind="wet_harvest",
+        farm=FarmSpec(length_m=268, width_m=64 * 1.1),
+        season=SeasonSpec(combine_capacity_kg=3000),
+        quota_mm=0,
+        grain_batches=True,
+    )
+    spec = compile_season(doc, archive, backend=backend)
+    runtime, _ = grow_to_harvest(spec, backend=backend)
+    before = runtime.export_state()
+    observed = require(call(runtime, "inspect_crop", **window((0, 63))))["receipt"]
+    limit = observed["harvest_batch_limit"]
+    assert limit["start_ridge"] == 0
+    assert 0 <= limit["end_ridge"] < 63
+    assert limit["limiting_error"] == "HARVEST_DRYER_CAPACITY_EXCEEDED"
+    assert set(limit) == {
+        "start_ridge",
+        "end_ridge",
+        "limiting_error",
+        "dryer_capacity_kg",
+    }
+    stop = limit["end_ridge"]
+    rejected = call(runtime, "harvest", **window((0, stop + 1)))
+    assert rejected.error == limit["limiting_error"]
+    assert rejected.data == {}
+    after = runtime.export_state()
+    for key in ("now", "backend_state", "physical_state"):
+        assert after[key] == before[key]
+    assert not any(
+        e.kind == "job_scheduled" for e in runtime.events[len(before["events"]) :]
+    )
+    require(call(runtime, "inspect_crop", **window((0, stop))))
+    progress = build_context(runtime, public_history(runtime), max_turns=1)["progress"]
+    assert (
+        "Waiting is not a remedy"
+        in progress["capacity_feedback"][0]["response_guidance"]
+    )
+    harvest = require(call(runtime, "harvest", **window((0, stop))))["receipt"]
+    assert harvest["dry_kg"] + harvest["water_kg"] <= limit["dryer_capacity_kg"]
+    assert (
+        "capacity_feedback"
+        not in build_context(runtime, public_history(runtime), max_turns=1)["progress"]
+    )
+    batch_id = harvest["batch"]["batch_id"]
+    require(
+        call(runtime, "unload_batch", batch_id=batch_id, trailer_id="grain_trailer-1")
+    )
+    require(
+        call(
+            runtime,
+            "dry_batch",
+            batch_id=batch_id,
+            dryer_id="grain_dryer-1",
+            target_moisture=0.135,
+        )
+    )
+    require(
+        call(
+            runtime, "store_batch", batch_id=batch_id, warehouse_id="grain_warehouse-1"
+        )
+    )
+    history = public_history(runtime)
+    assert progress_diagnostic(history[-3:], runtime.now)["management_actions"] == 3
+    restored, metrics = replay(artifact(runtime))
+    assert metrics["replay_verified"]
+    assert fingerprint(restored.export_state()) == fingerprint(runtime.export_state())

@@ -77,6 +77,42 @@
       "previous_asset_fingerprint": "cd90b4b8811247cd43427bb14631c97e9281f848abedfdc2fafa394daf36c176",
       "current_asset_fingerprint": "1b319d0c060eb6af25af12d23b4834f1817e09320cc5c5b6b5225825d57e1223",
       "notes": "The forecast-enabled normal scenario retains its public tools and management stages. The modeled dryer failure is opt-in."
+    },
+    {
+      "method": "batch_logistics_legacy_contract_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "1b319d0c060eb6af25af12d23b4834f1817e09320cc5c5b6b5225825d57e1223",
+      "current_asset_fingerprint": "92169cd690c51c91047f3258e544c159ce4641b32315e1d78f605f06a226da36",
+      "notes": "Existing single-load scenarios retain their public tools; named batch scenes use a separate operation set."
+    },
+    {
+      "method": "equipment_supply_legacy_contract_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "92169cd690c51c91047f3258e544c159ce4641b32315e1d78f605f06a226da36",
+      "current_asset_fingerprint": "8ead6f20d476df229de2733c4f02c074bf21c0b8b3f493dc6a7e57b5438590c1",
+      "notes": "Batch and supply operations are scoped to their declared scenes; the legacy lifecycle keeps its existing operation set."
+    },
+    {
+      "method": "named_batch_capacity_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": false,
+      "previous_asset_fingerprint": "8ead6f20d476df229de2733c4f02c074bf21c0b8b3f493dc6a7e57b5438590c1",
+      "current_asset_fingerprint": "a80aff36ee13f606d735107d6f01be1b4d7a45de1a00dcf87a5c25870c796b41",
+      "notes": "Revalidated the shared crop inspection and harvest descriptions. Named-batch capacity semantics are scoped to declared batch scenarios."
+    },
+    {
+      "method": "ontology_entity_module_layout_local_review",
+      "new_llm_extraction": false,
+      "phase_content_unchanged": true,
+      "public_tool_contract_unchanged": true,
+      "previous_asset_fingerprint": "a80aff36ee13f606d735107d6f01be1b4d7a45de1a00dcf87a5c25870c796b41",
+      "current_asset_fingerprint": "9e76ab27b40df9f7040ce77b0ca57690d3f3f90777a29ffd6d418b3bda5e6ba8",
+      "notes": "Rebound source evidence to separate entity modules. Lifecycle content and public tool schemas are unchanged."
     }
   ]
 }

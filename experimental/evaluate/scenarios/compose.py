@@ -21,7 +21,8 @@ from evaluate.scenarios.normal import (
 )
 from evaluate.scenarios.disturbances import Drought, STAGES
 
-REFERENCE_PATH = Path(__file__).parent / "lib/l3/hn58_normal_reference.json"
+REFERENCE_RESOURCE = "lib/baselines/l3/hn58_normal_reference.json"
+REFERENCE_PATH = Path(__file__).parent / REFERENCE_RESOURCE
 PROCESS_FILES = (
     "fairy/acps/backends/biology/native/season.py",
     "fairy/acps/backends/biology/native/soil_engine.py",
@@ -104,7 +105,11 @@ def compile_scenario(
         raise ValueError("Compile from normal, not from an already disturbed scenario")
     if len({d.event_id for d in disturbances}) != len(disturbances):
         raise ValueError("Duplicate disturbance ID")
-    reference = json.loads(REFERENCE_PATH.read_text()) if disturbances else None
+    reference = (
+        json.loads(files("evaluate").joinpath("scenarios", REFERENCE_RESOURCE).read_text(encoding="utf-8"))
+        if disturbances
+        else None
+    )
     if reference:
         validate_reference(reference, manifest)
     events = []
@@ -185,9 +190,7 @@ def validate_construction(spec: ScenarioSpec) -> None:
         raise ValueError("Construction metadata requires a full-season declaration")
     manifest = json.loads(spec.construction_json)
     if manifest.get("kind") == "historical":
-        from evaluate.scenarios.historical_scenarios import (
-            validate_historical_construction,
-        )
+        from evaluate.scenarios.historical.compiler import validate_historical_construction
 
         validate_historical_construction(spec, manifest)
         return

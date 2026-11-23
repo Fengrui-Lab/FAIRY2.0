@@ -13,7 +13,7 @@ from evaluate.scenarios.normal import SOYBEAN_NORMAL_MANAGEMENT
 from evaluate.scenarios.spec import ScenarioSpec
 from evaluate.scenarios.lib.l3.soybean_normal import (
     soybean_normal, soybean_drought_r1, soybean_drought_r5, soybean_drought_r1_r5, R1_DROUGHT, R5_DROUGHT)
-from evaluate.scenarios.lib.l3.normal_validation import validate_suite
+from evaluate.experiments.validation.normal import validate_suite
 from fairy.acps.ontology.contracts import OperationRequest
 from fairy.agents.loop.context.public import build_context
 from fairy.agents.loop.context.history import public_history

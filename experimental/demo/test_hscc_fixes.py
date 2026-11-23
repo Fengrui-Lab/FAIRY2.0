@@ -280,7 +280,7 @@ def test_cli_refuses_existing_artifact_before_engine_creation(tmp_path, monkeypa
 
 
 def test_fixed_drought_stage_and_intervention_response():
-    from evaluate.scenarios.lib.l3.validation import validate_drought_challenge
+    from evaluate.experiments.validation.drought import validate_drought_challenge
     from fairy.events.records import fingerprint
     report, records = validate_drought_challenge()
     assert report["valid"] and report["dry_grain_response_kg"] > 0

@@ -69,13 +69,13 @@ From the repository root, install `./experimental[wofost,oracle,llm,test]` and r
 
 ```bash
 .venv/bin/python -m interface.cli run --backend wofost --scenario soybean_l3_901_proxy_normal_v1
-.venv/bin/python -m evaluate.scenarios.lib.l3.wofost_validation --out .runs/wofost-validation-new
+.venv/bin/python -m evaluate.experiments.validation.wofost --out .runs/wofost-validation-new
 .venv/bin/python -m interface.cli.oracle train --backend wofost --timesteps 2048 --out .runs/wofost-policy-new.zip
 .venv/bin/python -m interface.cli.oracle evaluate --policy .runs/wofost-policy-new.zip --out .runs/wofost-evaluation-new
 ```
 
 Output paths must be new. A changed process/calendar is rejected: intentionally rebuild the
-WOFOST reference with `python -m evaluate.scenarios.lib.l3.wofost_validation --build-reference`
+WOFOST reference with `python -m evaluate.experiments.validation.wofost --build-reference`
 and revalidate paired probes. Never rebuild it automatically per candidate.
 
 See [integration evidence](../../../../../demo/WOFOST_FULL_SEASON.md) for actual results and

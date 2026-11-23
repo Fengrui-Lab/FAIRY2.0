@@ -79,9 +79,9 @@ flowchart TD
 
 | 操作 | 实际路径 | 要看到的关键事实 |
 |---|---|---|
-| `irrigate_range` | `ontology/infrastructure/season.py:IRRIGATE` → 场景`operation_bindings` → `events/registry.py` → `Runtime.invoke` → `_season_operation` → `backend.queue_irrigation` | 按选定面积计算全田平均额度；接受时扣额度并登记pending；此时不推进时钟 |
+| `irrigate_range` | `ontology/infrastructure/irrigation.py:IRRIGATE_RANGE` → 场景`operation_bindings` → `events/registry.py` → `Runtime.invoke` → `_season_operation` → `backend.queue_irrigation` | 按选定面积计算全田平均额度；接受时扣额度并登记pending；此时不推进时钟 |
 | 日结 | `Runtime._advance_time` → `backend.advance_day` → `environment_day_completed` | 仅跨本地日界结算一次，WOFOST转换mm为cm，Native执行自己的水量过程 |
-| `harvest` | `ontology/equipment/operations.py` → `Runtime.invoke` → `physical.plan` → `ScheduledJob` → 推进时钟 → `physical.execute` → `biology.harvest` | 检查成熟与容量；完成时再次检查；生物侧移出毛粮，物理侧记录回收及损失 |
+| `harvest` | `ontology/equipment/combine.py` → `Runtime.invoke` → `physical.plan` → `ScheduledJob` → 推进时钟 → `physical.execute` → `biology.harvest` | 检查成熟与容量；完成时再次检查；生物侧移出毛粮，物理侧记录回收及损失 |
 
 建议在IDE给这些函数下断点，分别执行一次成功灌溉、超额灌溉、跨日收获拒绝。
 不要仅观察终端“success”；同时看请求、事件、pending、引擎和物料账本。
@@ -175,7 +175,7 @@ flowchart TD
 
 ### M07 物理作业、装备与物料账本
 
-**入口**：`acps/backends/physical/native/backend.py`；`ontology/equipment/operations.py`；`ontology/infrastructure/season.py`。
+**入口**包括 `acps/backends/physical/native/backend.py`、`ontology/equipment/operations.py` 和各实体模块。收割、烘干和入库声明分别位于 `ontology/equipment/combine.py`、`ontology/infrastructure/dryer.py` 和 `ontology/infrastructure/grain_warehouse.py`。
 
 - [ ] 装备、传感器、设施的操作归属是否清楚？库存目前集中在物理后端是否满足需求？
 - [ ] 作业时长、通行条件、燃料/电量、容量、种子消耗是否各只有一个真值来源？

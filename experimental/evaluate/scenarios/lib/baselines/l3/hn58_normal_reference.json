@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "calendar_id": "hn58_synthetic_normal_calendar_v1",
+  "baseline_fingerprint": "6e6caa612e8779af040348826c8d6326f5ee029f21a6a2b90df0333a8f8f5b4c",
+  "template_fingerprint": "6916230f0edc552988f34afc0c8f11c89c8b48fdd251ded9ea93bb650d4eae5c",
+  "reference_backend": "native",
+  "capabilities": {
+    "backend_id": "native",
+    "model": "fairy_legacy_soil_canopy_soybean",
+    "version": "6",
+    "crops": [
+      "soybean"
+    ],
+    "actions": [
+      "irrigate",
+      "full_season",
+      "plant",
+      "harvest",
+      "seedbed_observation",
+      "surface_drainage",
+      "biotic_management",
+      "stand_repair"
+    ],
+    "timestep": "local_day"
+  },
+  "reference_prefix": "public inventory/weather/soil, prepare all ridges, plant all on start date; no irrigation",
+  "stage_starts": {
+    "pre_emergence": "2026-05-05",
+    "vegetative": "2026-05-12",
+    "R1": "2026-06-02",
+    "R3": "2026-06-18",
+    "R5": "2026-06-30",
+    "R6": "2026-07-11",
+    "R7": "2026-07-20",
+    "R8": "2026-07-24"
+  },
+  "process_files_sha256": {
+    "fairy/acps/backends/biology/native/season.py": "151ff71d9a8fb04b9c097a09c8d38c6dc5bfa77aef7e3efd7a1574981ca83813",
+    "fairy/acps/backends/biology/native/soil_engine.py": "2d2fc8776769f7afc3b54d16ced9cb923bdca9bc31005df4ade59ca1bb428ba3",
+    "fairy/acps/backends/biology/native/canopy_biomass_engine.py": "1a31a063079a0caba3bf3219e8a1447c6e3d03896dfc7cc739fb4ff178a89531",
+    "fairy/acps/backends/biology/native/biotic_pressure_engine.py": "f7bac942f2a70dc0f2a89d6d7af2eb3a010a042620397a1917bf7b38b41878fa",
+    "fairy/acps/backends/physical/native/backend.py": "ec539271c8419850fe16231478f24f64a3d12baf73fec433b0b18f276b66b98d",
+    "fairy/acps/ontology/crops/lib/soybean.py": "7bc572dbcf0664b78bd0fd30e5c2e0ed6235c13afc4f4b26443e6ef0db7a0cc0",
+    "fairy/events/session.py": "fd588813bca6c035cc0b3a8e8acf6b846384d7303539bf3721444df2062311dd",
+    "evaluate/scenarios/season.py": "d8fc1063918e25043f642b385babbc568e37cc9a85b889b5c48f2b5622fb6a41"
+  }
+}

@@ -32,10 +32,26 @@ class PublicContext(_RequiredContext, total=False):
     protocol_feedback: JsonObject
     oracle_guidance: JsonObject
     water_diagnostics: JsonObject
+    dose_feedback: JsonObject
 
 
 from fairy.events.records import detached, canonical
 from fairy.agents.loop.context.history import public_memory, progress_diagnostic
+
+_CAPACITY_FEEDBACK = {
+    "COMBINE_CAPACITY_EXCEEDED": "Reduce the ridge range or unload the combine. In named-batch scenarios inspect_crop shows harvest_batch_limit.",
+    "HARVEST_TRAILER_CAPACITY_EXCEEDED": "Reduce the ridge range. The proposed lot exceeds an empty trailer's capacity.",
+    "HARVEST_DRYER_CAPACITY_EXCEEDED": "Reduce the ridge range using inspect_crop.harvest_batch_limit. Waiting is not a remedy for this capacity rejection.",
+    "DRYER_CAPACITY_EXCEEDED": "This whole lot cannot fit in the dryer. The lot does not get smaller in the trailer. Do not wait or retry this lot.",
+}
+
+_INVENTORY_CHANGES = {
+    "prepare_seedbed", "plant", "harvest", "unload", "dry_grain", "store_grain",
+    "unload_batch", "dry_batch", "store_batch", "repair_dryer",
+    "mount_implement", "unmount_implement", "load_seeds", "return_seeds",
+    "refuel_equipment", "return_fuel", "charge_equipment",
+    "survey_multispectral", "survey_thermal", "ground_inspect",
+}
 
 
 def build_context(
@@ -72,11 +88,19 @@ def build_context(
         containers: dict[str, JsonObject | None] = {"combine": None, "trailer": None}
         capacities = {}
         latest_harvest = None
+        lots: dict[str, JsonObject] = {}
+        locations = {}
         for event in runtime.events:
             if event.kind != "operation_result" or not event.payload["ok"]:
                 continue
             receipt = event.payload.get("data", {}).get("receipt", {})
             operation = receipt.get("operation")
+            if "grain_batches" in receipt:
+                lots = {lot["batch_id"]: lot for lot in receipt["grain_batches"]}
+                locations = {
+                    "trailer": receipt["trailer_facility"]["object_id"],
+                    "warehouse": receipt["warehouse_facility"]["object_id"],
+                }
             if "combine" in receipt and "trailer" in receipt:
                 containers = {
                     name: {key: receipt[name][key] for key in ("dry_kg", "water_kg")}
@@ -86,6 +110,18 @@ def build_context(
                     name: receipt[name + "_capacity_kg"]
                     for name in ("combine", "trailer", "storage")
                 }
+                if "dryer_facility" in receipt:
+                    capacities["dryer"] = receipt["dryer_facility"]["capacity_kg"]
+            if operation in ("harvest", "unload_batch", "dry_batch", "store_batch"):
+                lot = receipt.get("batch")
+                if lot:
+                    lots[lot["batch_id"]] = lot
+                    if operation == "harvest":
+                        locations["combine"] = lot["location_id"]
+                    elif operation == "unload_batch":
+                        locations["trailer"] = lot["location_id"]
+                    elif operation == "store_batch":
+                        locations["warehouse"] = lot["location_id"]
             if operation == "harvest":
                 batch = {key: receipt[key] for key in ("dry_kg", "water_kg")}
                 latest_harvest = {
@@ -114,18 +150,7 @@ def build_context(
                 prepared.update(receipt["completed_ridges"])
             if operation == "plant":
                 planting_change_seq = event.seq
-            if operation in (
-                "prepare_seedbed",
-                "plant",
-                "harvest",
-                "unload",
-                "dry_grain",
-                "store_grain",
-                "charge_equipment",
-                "survey_multispectral",
-                "survey_thermal",
-                "ground_inspect",
-            ):
+            if operation in _INVENTORY_CHANGES:
                 inventory_change_seq = event.seq
             prepared.update(receipt.get("prepared_ridges", ()))
             if operation == "plant":
@@ -134,6 +159,38 @@ def build_context(
                 harvested.update(receipt["completed_ridges"])
             elif operation == "store_grain":
                 stored += 1
+        batch_progress = {}
+        if lots:
+            for name in containers:
+                at_location = [lot for lot in lots.values() if lot["location_id"] == locations.get(name)]
+                containers[name] = {
+                    key: sum((lot[key] for lot in at_location), 0.0)
+                    for key in ("dry_kg", "water_kg")
+                }
+            stored = sum(lot["location_id"] == locations.get("warehouse") for lot in lots.values())
+            batch_progress["pending_grain_batches"] = [
+                {
+                    "batch_id": lot["batch_id"],
+                    "location_id": lot["location_id"],
+                    "drying_completed": lot["dried_by"] is not None,
+                }
+                for lot in lots.values()
+                if lot["location_id"] != locations.get("warehouse")
+            ]
+        capacity_feedback = {}
+        for turn in history:
+            request, result = turn["request"], turn["result"]
+            tool = request["tool"]
+            if result["ok"]:
+                capacity_feedback.pop(tool, None)
+            elif result["error"] in _CAPACITY_FEEDBACK:
+                capacity_feedback[tool] = {
+                    "request": request,
+                    "error": result["error"],
+                    "response_guidance": _CAPACITY_FEEDBACK[result["error"]],
+                }
+        if capacity_feedback:
+            batch_progress["capacity_feedback"] = list(capacity_feedback.values())
         targets = set(range(spec.season.ridge_count))
         context["progress"] = {
             "source": "successful public tool receipts",
@@ -151,6 +208,7 @@ def build_context(
                 "capacities_kg": capacities,
             },
             "latest_harvest_receipt": latest_harvest,
+            **batch_progress,
         }
         context["constraints"] = dict(
             ridge_count=spec.season.ridge_count,

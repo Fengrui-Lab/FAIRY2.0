@@ -77,7 +77,7 @@ The v1 weather trace and engineering reference remain unchanged. The default
 full-season factory now selects the explicitly versioned v2 synthetic trace,
 setting July 15–31 rain to zero to overlap R5/R6 for the fixed reference sowing.
 No weather event is moved in response to candidate actions. Transformation and
-source/derived hashes are in `evaluate/scenarios/lib/l3/weather_v2_provenance.json`.
+source/derived hashes are in `evaluate/scenarios/lib/data/weather/weather_v2_provenance.json`.
 The offline validator checks 17 target-stage days, low soil water and a positive
 actual stored-dry-mass response under a fixed intervention using identical forcing.
 This closes the stage-alignment counterexample; it does not calibrate the crop

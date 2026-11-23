@@ -31,7 +31,7 @@
 
 ```bash
 .venv/bin/python -m pytest -q experimental/demo/test_native_legacy_process.py
-.venv/bin/python -m evaluate.scenarios.lib.l3.normal_validation --out .runs/native-port-paired
+.venv/bin/python -m evaluate.experiments.validation.normal --out .runs/native-port-paired
 ```
 
 ## 历史场景新增能力

@@ -13,7 +13,9 @@ from fairy.acps.ontology.contracts import (
     OperationDefinition,
     OperationRejected,
     Parameter,
+    receipt_operation,
 )
+from fairy.acps.ontology.farm.observations import RANGE
 
 IRRIGATE = OperationDefinition(
     "irrigate",
@@ -26,6 +28,14 @@ IRRIGATE = OperationDefinition(
     ),
     "next_local_midnight",
     required_backend_actions=("irrigate",),
+)
+
+
+IRRIGATE_RANGE = receipt_operation(
+    "irrigate_range",
+    "Queue water depth in mm for selected ridges; settles at midnight. Quota is field-average mm.",
+    RANGE + (Parameter("depth_mm", "number", exclusive_minimum=0, maximum=50, unit="mm"),),
+    timing="next_local_midnight",
 )
 
 

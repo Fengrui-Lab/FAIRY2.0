@@ -5,7 +5,14 @@ from __future__ import annotations
 from typing import Any, ClassVar, TYPE_CHECKING
 
 from sb3_contrib.common.maskable.policies import MaskableActorCriticPolicy
-from torch import nn
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
+from torch import cat, nn
+
+from fairy.agents.models.numeric.irrigation_window import (
+    HISTORY_DAYS,
+    HISTORY_FIELDS,
+    SNAPSHOT_FIELDS,
+)
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -53,3 +60,34 @@ class SoilWaterStressRegressor(nn.Module):
     def forward(self, observations: Tensor) -> Tensor:
         _, state = self.encoder(observations)
         return self.head(state[0]).squeeze(-1)
+
+
+class IrrigationWindowEncoder(BaseFeaturesExtractor):
+    """Encode the same seven public daily rows supplied to the flat policy.
+
+    A small temporal convolution trades no input fields for its temporal inductive
+    bias. Keeping the original feature width makes the actor and critic identical
+    in size to the flat-window policy.
+    """
+
+    def __init__(self, observation_space: Space) -> None:
+        snapshot = len(SNAPSHOT_FIELDS)
+        channels = len(HISTORY_FIELDS)
+        width = snapshot + HISTORY_DAYS * channels
+        if observation_space.shape != (width,):
+            raise ValueError("Unexpected irrigation history layout")
+        super().__init__(observation_space, features_dim=width)
+        self.snapshot_width = snapshot
+        self.channels = channels
+        self.temporal = nn.Sequential(
+            nn.Conv1d(channels, channels, kernel_size=3, padding=1), nn.Tanh()
+        )
+
+    def forward(self, observations: Tensor) -> Tensor:
+        current = observations[:, : self.snapshot_width]
+        window = observations[:, self.snapshot_width :].reshape(
+            -1, HISTORY_DAYS, self.channels
+        )
+        encoded = self.temporal(window.transpose(1, 2)).transpose(1, 2)
+        present = window[:, :, HISTORY_FIELDS.index("day_mask")].unsqueeze(-1)
+        return cat((current, (encoded * present).flatten(start_dim=1)), dim=1)

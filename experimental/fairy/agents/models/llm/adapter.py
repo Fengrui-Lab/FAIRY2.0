@@ -167,6 +167,9 @@ class LLMAdapter:
                 "Do not use text-only replies for progress updates, plans, or announcements of a next action. "
                 "Continue using tools until the entire declared task is complete, then finish with text. "
                 "This is a simulation: read-only calls do not advance time or run processes in the background. "
+                "Successful scheduled jobs are already complete when their result arrives. "
+                "For capacity rejections, use the public response guidance and change the operation "
+                "or its inputs. Do not wait and repeat an unchanged operation on the same oversized lot. "
                 "The tool messages contain actual results; do not invent results.",
             },
             {

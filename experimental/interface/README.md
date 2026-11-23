@@ -44,7 +44,7 @@ This trusted check does not expose audit state to the model.
 CLI新增 `soybean_l3_hn58_normal_v1`、`soybean_l3_hn58_drought_r1_v1`、
 `soybean_l3_hn58_drought_r5_v1`、`soybean_l3_hn58_drought_r1_r5_v1`。
 当前版本为0.8.2/schema7，仍使用原run/resume/replay/evaluate入口和不可覆盖产物策略。
-离线完整对照：`python -m evaluate.scenarios.lib.l3.normal_validation --out NEW_DIRECTORY`。
+离线完整对照：`python -m evaluate.experiments.validation.normal --out NEW_DIRECTORY`。
 
 ## Automatic Oracle MVP
 
@@ -53,3 +53,5 @@ CLI新增 `soybean_l3_hn58_normal_v1`、`soybean_l3_hn58_drought_r1_v1`、
 WOFOST全季显式使用 `run --backend wofost --scenario soybean_l3_901_proxy_normal_v1`；
 自动Oracle的 `train` 和 `generate` 同样支持 `--backend wofost`。训练权重绑定品种、
 后端及场景，不自动从Native切换。参见[本轮验收](../demo/WOFOST_FULL_SEASON.md)。
+
+For the WOFOST Soybean_901 LLM workflow, `--fixed-irrigation-dose-mm` exercises delegated dose selection through the normal runtime and replay. The LLM chooses the target and timing using `request_irrigation`. See [the execution contract](../evaluate/oracle/NUMERIC_DOSE.md).

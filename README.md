@@ -2,6 +2,7 @@
 
 当前 `kun` 分支用于验证 FAIRY2.0 的重建方案，尚不是公开稳定发行版。
 实现、测试和详细技术说明集中在 [`experimental/`](experimental/README.md)。
+跨设备接手可先阅读[开发交接文档](experimental/HANDOFF.md)，了解当前基线、验证结果和待办。
 
 ```text
 FAIRY2.0/

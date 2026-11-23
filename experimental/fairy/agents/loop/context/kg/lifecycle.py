@@ -30,7 +30,12 @@ REQUIRED_OBSERVATIONS = {
 SOURCE_PATHS = {
     "manual_reference": "agents/loop/controller/season_oracle.py",
     "operations": "acps/ontology/equipment/operations.py",
-    "facilities": "acps/ontology/infrastructure/season.py",
+    "facilities": "acps/ontology/infrastructure/dryer.py",
+    "tractor": "acps/ontology/equipment/tractor.py",
+    "combine": "acps/ontology/equipment/combine.py",
+    "crop_sensor": "acps/ontology/infrastructure/crop_sensor.py",
+    "irrigation": "acps/ontology/infrastructure/irrigation.py",
+    "grain_warehouse": "acps/ontology/infrastructure/grain_warehouse.py",
     "biology": "acps/backends/biology/native/season.py",
     "physical": "acps/backends/physical/native/backend.py",
     "validator": None,

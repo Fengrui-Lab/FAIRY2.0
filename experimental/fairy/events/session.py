@@ -141,7 +141,38 @@ class Runtime:
             return None
         from fairy.acps.backends.physical.native.backend import NativePhysicalBackend
 
-        return NativePhysicalBackend(scenario.season, scenario.farm)
+        from fairy.acps.ontology.equipment.operations import GRAIN_PROVIDERS
+
+        facility_types = set(GRAIN_PROVIDERS)
+        facilities = [obj for obj in scenario.objects if obj.type_id in facility_types]
+        backend: NativePhysicalBackend
+        if facilities:
+            from fairy.acps.backends.physical.native.grain import BatchPhysicalBackend
+
+            combines = [obj for obj in scenario.objects if obj.type_id == "combine"]
+            if len(facilities) != len(facility_types) or {obj.type_id for obj in facilities} != facility_types or len(combines) != 1:
+                raise ValueError("Batch logistics requires exactly one combine, trailer, dryer and warehouse")
+            if any(name in scenario.tools for name in ("unload", "dry_grain", "store_grain")):
+                raise ValueError("Batch logistics requires batch-addressed grain operations")
+            backend = BatchPhysicalBackend(
+                scenario.season, scenario.farm,
+                {obj.type_id: obj.object_id for obj in [*facilities, *combines]},
+            )
+        else:
+            backend = NativePhysicalBackend(scenario.season, scenario.farm)
+        from fairy.acps.ontology.equipment.supply import SUPPLY_ACTIONS, SUPPLY_OBJECTS
+
+        supply_types = set(SUPPLY_OBJECTS)
+        supply_objects = [obj for obj in scenario.objects if obj.type_id in supply_types]
+        if supply_objects:
+            required = supply_types | {"tractor", "combine"}
+            objects = [obj for obj in scenario.objects if obj.type_id in required]
+            if len(objects) != len(required) or {obj.type_id for obj in objects} != required:
+                raise ValueError("Equipment supply needs one warehouse, tractor, combine and each implement")
+            backend.enable_supply({obj.type_id: obj.object_id for obj in objects})
+        elif SUPPLY_ACTIONS.intersection(scenario.tools):
+            raise ValueError("Equipment supply operations require declared equipment and warehouse")
+        return backend
 
     def _emit(self, kind: str, payload: JsonObject, cause: int | None = None) -> int:
         """在唯一时钟上追加不可变事件，返回连续序号；cause链接本次操作请求。"""
@@ -374,6 +405,7 @@ class Runtime:
                 if name == "inspect_crop"
                 else self.season_backend.soil_observation(ids)
             )
+            receipt: JsonObject = {"observations": rows, "time": self.now.isoformat()}
             if name == "inspect_crop":
                 statuses = self.season_backend.management_state()
                 rows = [
@@ -384,7 +416,24 @@ class Runtime:
                     }
                     for row in rows
                 ]
-            return {"receipt": {"observations": rows, "time": self.now.isoformat()}}
+                receipt["observations"] = rows
+                from fairy.acps.backends.physical.native.grain import BatchPhysicalBackend
+
+                if (
+                    isinstance(self.physical, BatchPhysicalBackend)
+                    and "harvest" in self.scenario.tools
+                ):
+                    contiguous: list[int] = []
+                    for row in rows:
+                        if row["harvestable"]:
+                            contiguous.append(row["ridge_id"])
+                        elif contiguous:
+                            break
+                    if contiguous:
+                        receipt["harvest_batch_limit"] = self.physical.harvest_batch_limit(
+                            self.season_backend, contiguous
+                        )
+            return {"receipt": receipt}
         if name == "inspect_dryer":
             return {"receipt": self.physical.dryer_observation()}
         if name == "inspect_inventory":
@@ -423,8 +472,9 @@ class Runtime:
         self._advance_time({"hours": job.duration_hours}, cause)
         if check_seedbed:
             self._seedbed_ready(args, check_plant=True)
+        execution_args = {**args, "_harvest_request_seq": cause} if name == "harvest" else args
         receipt = self.physical.execute(
-            name, args, self.season_backend, self.weather[self.now.date().isoformat()]
+            name, execution_args, self.season_backend, self.weather[self.now.date().isoformat()]
         )
         self._emit("job_completed", {"operation": name, "receipt": receipt}, cause)
         return {"receipt": receipt}
@@ -630,7 +680,8 @@ class Runtime:
         protection_used = 0
         pending_protection: dict[int, str] = {}
         replanted_sites: dict[int, int] = {}
-        dryer_history: list[str] = []
+        work_history: list[JsonObject] = []
+        from fairy.acps.ontology.equipment.supply import FUEL_PER_RIDGE, SUPPLY_ACTIONS
         prepared, planted, harvested, seeds_used = set(), set(), set(), 0
         errors, observations, first, last, terminated = 0, [], None, None, False
         request = None
@@ -847,8 +898,10 @@ class Runtime:
                             elif name != "harvest":
                                 entry["depth"] = args["depth_mm"]
                             season_inputs.append(entry)
-                        if name in ("dry_grain", "store_grain", "repair_dryer"):
-                            dryer_history.append(name)
+                        if name in FUEL_PER_RIDGE or name in SUPPLY_ACTIONS or name in ("dry_grain", "store_grain", "repair_dryer", "unload_batch", "dry_batch", "store_batch"):
+                            work_history.append(dict(
+                                operation=name, receipt=data["receipt"], arguments=args, request_seq=request.seq,
+                            ))
                         if name == "replant_gaps":
                             receipt = data["receipt"]
                             filled = receipt["filled_sites"]
@@ -958,7 +1011,8 @@ class Runtime:
                 or seeds_used != self.season_physical.state["seeds_used"]
             ):
                 raise ValueError("Field operations disagree with restored object states")
-            self.season_physical.validate_dryer_history(dryer_history)
+            self.season_physical.validate_grain_history(work_history)
+            self.season_physical.validate_supply_history(work_history)
         if isinstance(self.backend, StandRepairBackend) and self.backend.replant_ledger() != replanted_sites:
             raise ValueError("Replanted cohorts disagree with event receipts")
         if isinstance(self.backend, BioticManagementBackend) and self.backend.protection_ledger() != (

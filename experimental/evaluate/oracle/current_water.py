@@ -14,7 +14,7 @@ from typing import Sequence
 import numpy as np
 
 from evaluate.oracle.stress_supervision import REGIONS, Probe, probes
-from evaluate.scenarios.historical_scenarios import (
+from evaluate.experiments.historical.operations import (
     TARGET,
     call,
     next_day,

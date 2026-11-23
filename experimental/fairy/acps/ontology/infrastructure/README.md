@@ -7,6 +7,10 @@ Scope: fixed installations and systems such as irrigation networks, sensor syste
 
 Providers receive only the interfaces needed for their behavior. They never own an independent clock or retain a second copy of crop/soil state. Runtime restores or replaces the backend without leaving providers bound to an old instance.
 
-`season.py` owns the spatial irrigation, grain-facility and charging contracts.
-Their execution uses the shared Runtime and physical ledger; irrigation queues
-water for daily biology settlement. It does not simulate a finite reservoir.
+`irrigation.py` 也定义全季分垄灌溉。`crop_sensor.py`、`seedbed_sensor.py`
+和 `stand_sensor.py` 分别声明作物和土壤观测、种床观测和苗情观测。
+`surface_drainage.py` 声明积水观测与排水，`charging_station.py` 声明设备充电。
+
+`dryer.py` 定义烘干机、烘干和维护，`grain_warehouse.py` 定义粮库与安全入库，
+`supply_warehouse.py` 定义种子和燃油收发。物理后端在 Runtime 事务中更新
+作业与物料状态。

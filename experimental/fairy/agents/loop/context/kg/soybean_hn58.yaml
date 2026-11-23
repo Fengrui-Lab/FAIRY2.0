@@ -1,4 +1,4 @@
-contract_fingerprint: 315cbd4dae843c49e03f75ceda2bbded9a533a8736e662720af1edefac5be67b
+contract_fingerprint: 3407985973345a795604809c4726573950a9c4f61ae049ea647cac3b76e54fff
 crop: soybean
 cultivar: HEINONG58
 phases:
@@ -82,18 +82,33 @@ sources:
   biology:
     path: fairy/acps/backends/biology/native/season.py
     sha256: 151ff71d9a8fb04b9c097a09c8d38c6dc5bfa77aef7e3efd7a1574981ca83813
+  combine:
+    path: fairy/acps/ontology/equipment/combine.py
+    sha256: 10ad06803bb035760478dceaecf1700024502e58bde19f485b49196c10471aee
+  crop_sensor:
+    path: fairy/acps/ontology/infrastructure/crop_sensor.py
+    sha256: e224e55e56ee483d421970edb61b412069c8736b5fb4f1c97dc08010c39565cb
   facilities:
-    path: fairy/acps/ontology/infrastructure/season.py
-    sha256: 66f3e617bd24e8031f66aba729f47d2675e73b5da86667d61cba00915de786f9
+    path: fairy/acps/ontology/infrastructure/dryer.py
+    sha256: 5a6e4705046eda4a242d096be3ae41c61a757a391e7355f079ce909b6d386c2c
+  grain_warehouse:
+    path: fairy/acps/ontology/infrastructure/grain_warehouse.py
+    sha256: fb87d7ca8352d28a90ac8cd734ffd243fea86109e29dcd73472067b9fc2887c3
+  irrigation:
+    path: fairy/acps/ontology/infrastructure/irrigation.py
+    sha256: 0d5b1771a5da090c996e1213edd0d701a980ca905169a989f878f9fc910c27ea
   manual_reference:
     path: fairy/agents/loop/controller/season_oracle.py
     sha256: 62bfe7ed648b7df4748921bd4e78125e0b42211d9f930277ac32017dfffee553
   operations:
     path: fairy/acps/ontology/equipment/operations.py
-    sha256: e7bbe734479f5fd56ec20fa20855e8abdb281d97c609be82495ac187ed2c82c4
+    sha256: ce2ab887b3ce3c2b667fb325d182b17a78e31f2353d7c0facf43d889f7cd9ce7
   physical:
     path: fairy/acps/backends/physical/native/backend.py
-    sha256: 4b8a174757f9c84b5f3e4723307264d53efda02aa0e609bd195c8a3c7a754a8e
+    sha256: ec539271c8419850fe16231478f24f64a3d12baf73fec433b0b18f276b66b98d
+  tractor:
+    path: fairy/acps/ontology/equipment/tractor.py
+    sha256: 512f262f4ae2de1545c4d39dedf2942ecd39ecb00529b0b47c34c1b85a3f5074
   validator:
     path: evaluate/metrics/season.py
     sha256: e1ff8f57d6f1548d429b3017522acdb012a8724015b3f2b8c9f7646da92c11f4

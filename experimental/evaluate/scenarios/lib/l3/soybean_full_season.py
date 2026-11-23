@@ -1,10 +1,9 @@
 """Declarative reconstruction of the selected 64-ridge full-season task."""
 
 from __future__ import annotations
-from typing import TYPE_CHECKING
 import hashlib
 import json
-from pathlib import Path
+from importlib.resources import files
 from evaluate.scenarios.spec import ScenarioSpec
 from evaluate.scenarios.season import SeasonSpec
 from fairy.acps.ontology.crops.lib.soybean import SoybeanSpec
@@ -20,7 +19,7 @@ WEATHER_SHA256 = "b9fd613f15ef1e6a216b0c557968ef5f377ca853df1c0050f18d34e3c7d8a1
 
 def soybean_full_season_legacy() -> ScenarioSpec:
     """返回明确后端/品种范围的不可变场景声明，不实例化引擎或运行Agent。"""
-    raw = Path(__file__).with_name("weather.json").read_bytes()
+    raw = files("evaluate").joinpath("scenarios/lib/data/weather/weather.json").read_bytes()
     if hashlib.sha256(raw).hexdigest() != WEATHER_SHA256:
         raise ValueError("Full-season forcing fingerprint mismatch")
     weather = tuple(WeatherDay(**item) for item in json.loads(raw))
@@ -64,7 +63,7 @@ def soybean_full_season() -> ScenarioSpec:
     """Versioned fixed-forcing challenge; retain v1 unchanged for explicit inspection."""
     from dataclasses import replace
 
-    folder = Path(__file__).parent
+    folder = files("evaluate").joinpath("scenarios/lib/data/weather")
     provenance = json.loads((folder / "weather_v2_provenance.json").read_text())
     raw = (folder / "weather_v2.json").read_bytes()
     if hashlib.sha256(raw).hexdigest() != provenance["derived_sha256"]:

@@ -13,11 +13,11 @@
 从仓库根目录执行（首次获取需要网络以及 `wofost` 可选依赖；新产物路径不能已存在）：
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot fetch-era5 .runs/historical/raw --out .runs/historical/archive.json
-.venv/bin/python -m evaluate.scenarios.historical_pilot build .runs/historical/archive.json .runs/historical/pilot
-.venv/bin/python -m evaluate.scenarios.historical_pilot verify .runs/historical/archive.json .runs/historical/pilot
+.venv/bin/python -m evaluate.experiments.historical.cli fetch-era5 .runs/historical/raw --out .runs/historical/archive.json
+.venv/bin/python -m evaluate.experiments.historical.cli build .runs/historical/archive.json .runs/historical/pilot
+.venv/bin/python -m evaluate.experiments.historical.cli verify .runs/historical/archive.json .runs/historical/pilot
 # 或使用已取得的官方 ERA5-Land 点位 CSV，覆盖 1990-12-31 至 2020-12-31 UTC
-.venv/bin/python -m evaluate.scenarios.historical_pilot import-cds /path/to/cds/export/*.csv --out .runs/historical-land/archive.json
+.venv/bin/python -m evaluate.experiments.historical.cli import-cds /path/to/cds/export/*.csv --out .runs/historical-land/archive.json
 ```
 
 CDS CSV 使用去累积的小时降水（m）和积算短波（J/m²），气温/露点（K）、气压（Pa）、10 m 风分量（m/s），以 UTC 时戳和经纬度校验来源。可同时导入同一格点不同变量组的文件。这里不接收未去累积 GRIB 或已聚合日表。
@@ -64,11 +64,11 @@ CDS CSV 使用去累积的小时降水（m）和积算短波（J/m²），气温
 
 ```bash
 archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
-.venv/bin/python -m evaluate.scenarios.historical_pilot expand-droughts "$archive" .runs/harbin-droughts
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-dual-dry-patches "$archive" .runs/harbin-dual
-.venv/bin/python -m evaluate.scenarios.historical_pilot run-regional \
+.venv/bin/python -m evaluate.experiments.historical.cli expand-droughts "$archive" .runs/harbin-droughts
+.venv/bin/python -m evaluate.experiments.historical.cli build-dual-dry-patches "$archive" .runs/harbin-dual
+.venv/bin/python -m evaluate.experiments.historical.cli run-regional \
   .runs/changchun-era5/archive.json \
-  experimental/evaluate/scenarios/lib/l3/changchun_hn58_2016_profile.json \
+  experimental/evaluate/scenarios/lib/l3/configs/changchun_hn58_2016_profile.json \
   .runs/changchun-season
 ```
 
@@ -89,7 +89,7 @@ archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
 全季、对照、短任务及检查点均通过严格回放。天气服务公开已完成日，公开规则可从当时的操作拒绝决定等待。物理引擎的通行门槛仍基于当日总降水和土壤状态。若要评测提前择时，还需要有发布时间的预报或子日实际天气观测。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-wet-harvest \
+.venv/bin/python -m evaluate.experiments.historical.cli build-wet-harvest \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-wet-harvest
 ```
 
@@ -106,7 +106,7 @@ archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
 全季、提前播种对照、短任务与检查点均严格回放通过。土温是区域天气驱动的 Native 模拟表层温度，10 °C 是当前模型的作业门槛。出苗仍按现有积温状态判定，未估计低温损苗率。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-cold-planting \
+.venv/bin/python -m evaluate.experiments.historical.cli build-cold-planting \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-cold-planting
 ```
 
@@ -124,7 +124,7 @@ archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
 两组均完成 64 垄收储，对照相差 140.34 kg 模拟入库干粮。L2 从尚需定位积水的全地块观测点切片，L1 从受涝区已确认的处理点切片；均对照同一检查点的未排水分支。排水后一经恢复，继续推进与不中断轨迹逐事件一致。非排水区操作会拒绝，篡改出流回执无法恢复，完整轨迹通过严格回放。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-flood \
+.venv/bin/python -m evaluate.experiments.historical.cli build-flood \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-flood
 ```
 
@@ -140,7 +140,7 @@ archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
 L2 从尚未进行同日目标巡查的检查点开始，L1 已知候选范围。病害切片继承第一轮处置记录和已经衰退的保护状态。两组切片都验证同一起点的等待对照、公开选区和处置后待结算状态恢复。病害复发在本场景由显式第二轮压力形成；日期为工程场景设定，天气来自 ERA5，阶段来自模拟实际运行。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-biotic \
+.venv/bin/python -m evaluate.experiments.historical.cli build-biotic \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-biotic
 ```
 
@@ -158,7 +158,7 @@ L2 从尚未进行同日目标巡查的检查点开始，L1 已知候选范围�
 补种苗独立累计积温并产生冠层和籽粒。两个苗群共享逐垄土壤，覆盖、干粮和水量按占用面积汇总。带补种苗的垄待两群成熟后才可整垄收割；当前没有垄内分段收割。L2 从尚未确认缺苗的位置派生，L1 从首块已定位缺口的作业前检查点派生。两组短任务验证恢复后出苗、同起点等待以及严格回放。漏播幅度是工程设定，入库差异是模拟结果。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-replant \
+.venv/bin/python -m evaluate.experiments.historical.cli build-replant \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-replant
 ```
 
@@ -176,13 +176,13 @@ L2 从尚未进行同日目标巡查的检查点开始，L1 已知候选范围�
 检修和等待前后，拖车干粮和水的质量未变化。因果账本验证故障触发与修复完成状态，拒绝伪造修复的快照。全季、检查点、短任务、无修复和等待对照均通过严格回放。规则采用单次确定性故障和固定维修耗时。
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.historical_pilot build-dryer-failure \
+.venv/bin/python -m evaluate.experiments.historical.cli build-dryer-failure \
   .runs/historical-era5-openmeteo-1991-2020/archive.json .runs/harbin-dryer-failure
 ```
 
 ## WOFOST 历史场景首批接入
 
-通过 `historical_pilot` 的 `--backend wofost` 运行。依次使用
+通过历史实验 CLI 的 `--backend wofost` 运行。依次使用
 `expand-droughts`、`build-dual-dry-patches`、`build-wet-harvest`、
 `build-cold-planting`、`build-dryer-failure`。长春使用
 `run-regional` 和独立天气归档及原区域配置。各命令需要新的输出目录。
@@ -190,10 +190,10 @@ L2 从尚未进行同日目标巡查的检查点开始，L1 已知候选范围�
 `interface.cli replay`。
 
 ```sh
-PYTHONPATH=experimental .venv/bin/python -m evaluate.scenarios.historical_pilot \
+PYTHONPATH=experimental .venv/bin/python -m evaluate.experiments.historical.cli \
   expand-droughts .runs/historical-era5-openmeteo-1991-2020/archive.json \
   .runs/wofost-droughts --backend wofost
-PYTHONPATH=experimental .venv/bin/python -m evaluate.scenarios.historical_pilot \
+PYTHONPATH=experimental .venv/bin/python -m evaluate.experiments.historical.cli \
   verify .runs/historical-era5-openmeteo-1991-2020/archive.json \
   .runs/wofost-droughts --backend wofost
 ```
@@ -238,3 +238,141 @@ WOFOST 的水分和作物生长由 PCSE 6.0.13 `Wofost81_WLP_CWB` 计算。
 `dryer/interrupted-repair.json` 和 `dryer/resumed-repair.json`。
 验收产物位于 `.runs/wofost-historical-g6jHft`，其严格回放对应本地基线
 `dc1f408`。
+
+## 带身份的收储设备与粮食批次
+
+`build-wet-harvest` 和 `build-dryer-failure` 使用 `grain_batches_v1`。
+仓库、烘干机和拖车分别声明为一个可引用的场景对象，批次随成功收割创建。
+旧场景声明仍可使用原收储操作。历史回放须使用与产物匹配的源码指纹。
+
+- `harvest` 返回以收割请求序号生成的 `batch_id`、来源地块、品种、垄段和质量。
+- `unload_batch(batch_id, trailer_id)` 转移指定收割机批次，按实际湿质量检查拖车载重。
+- `dry_batch(batch_id, dryer_id, target_moisture)` 处理仍归拖车的整批粮食。烘干机单批限 1000 kg 湿粮，除水速率 100 kg/h，最低作业耗时 0.25 h，耗电 0.8 kWh/kg 除水。沿用湿基含水率。
+- `store_batch(batch_id, warehouse_id)` 检查安全含水率和累计仓容，成功后变更同一批次的归属。`inspect_inventory` 公开设施、批次及仓容余量。公共聚合量从批次账本计算。
+- 物理后端维护唯一批次账本，Runtime 负责作业时钟和回滚。恢复用成功作业记录校验批次来源和流转，严格回放再执行原操作。失败不会扣量或提前入库。
+
+阴雨收储的主轨仍验证成熟雨日的通行门槛、收割机超容量和仓容不足。
+同一个构建命令另生成 `east-l3.json`、`east-run.json` 和
+`east-l1*`、`east-l2*`。西侧 0–31 垄通过公开前缀分批入库，东侧首批
+32–35 垄已在拖车上且高于安全含水率。L2 从尚未查看交接库存开始诊断，
+L1 从已确认批次的检查点执行。两条切片均校验原西批原样保留、同一个
+东批先烘干再入库。对照验证湿粮直存和重复存西批均被拒绝。
+WOFOST 东批正例从实际成熟后的湿粮窗口建立，独立于晚雨通行样例。
+
+烘干机故障由第一个已烘干批次完成入库触发。对照只等待或直接尝试存湿粮，
+修复路径在恢复后继续处理原有批次。机具挂载、机载库存和补给转移属于下一批。
+
+| 东批交接实测 | 西侧已收储 | 东侧拖车批次初始湿基含水率 | 东批除水 | 全季入库湿质量 / 仓容 |
+| --- | --- | ---: | ---: | ---: |
+| Native | 32 垄，8 批 | 26.40% | 121.41 kg | 10,669.36 / 11,000 kg |
+| WOFOST | 32 垄，8 批 | 26.64% | 75.78 kg | 6,521.29 / 6,700 kg |
+
+两个后端的 L1/L2 均保留相同的原西批记录以及同一个东批 ID，东批从
+拖车进入仓库，干质量一致。两条烘干机故障轨迹也都验证检修提交前中断、
+恢复后重试及严格回放。本轮产物位于 `.runs/acps-grain-cwmHrk`。
+
+## 机具挂载与种子、燃油补给
+
+`build-cold-planting` 和 `build-replant` 使用 `equipment_supply_v1`。
+场景声明供给仓库、整地机具和播种机具，拖拉机有一个挂载位。
+种子和燃油初始均在仓库。拖拉机种箱上限 500,000 粒，拖拉机和收割机
+油箱上限分别为 90 L 和 75 L。挂卸机具和每次补给或退料均由 Runtime
+排程 15 分钟。这些容量和耗时为工程设定。
+
+- `mount_implement` / `unmount_implement` 改变挂载关系。整地要求整地机具，
+  播种和补种要求播种机具。收割从收割机自身的油箱扣油。
+- `load_seeds` / `return_seeds` 以整数粒转移，`refuel_equipment` /
+  `return_fuel` 以升转移。整个请求通过供给和容量校验后才提交。
+  `inspect_inventory` 给出挂载、机载量、容量和仓库余量。
+- 播种按地块及间距计算种子用量。Native 补种只扣可修复的实际漏播位点。
+  仓库、机载和已耗用合计守恒，恢复按成功作业记录校验机具与物资归属。
+
+冷春 L2 从种床适播且整地完成、仍挂整地机具、机载种油不足的实际前缀
+开始。公开策略换挂机具、装种、补油、播种后观察出苗。L1 从换挂和补给
+已完成的同一全季轨迹切出，执行播种并确认出苗。保留过冷拒绝；装备对照
+验证错挂机具、挂载位已占用、种箱超容量、机载缺种和仓库缺油。
+装种／退种以及加油／退油各验证往返守恒。
+
+Native 漏播案例对照补种与不补种，核对分区缺口、种箱逐笔扣量和耗种差；
+原苗保留，补种后用苗情工具复查。严格回放使用与产物匹配的源码指纹。
+
+本轮两后端的冷春 L1 均继承已挂的播种机具、434,240 粒种子和
+25.6 L 机载燃油。冷春 L2 均从机载种油为空的整地后前缀开始。
+Native 补种的种箱从 65,760 粒依次变为 52,732 粒和 41,332 粒，
+两笔扣量对应 8 垄的 24,428 个实际缺口。22 份全季、切片和对照产物
+通过独立恢复与严格回放。该轮汇总位于 `.runs/acps-supply-AsFjFj/qualification.json`。
+
+## 同一 L3 串接机载补给与批次收储
+
+`grain_and_supply_v1` 同时声明两组对象。该案例沿用哈尔滨 1995 年
+冷春轨迹、64 垄和原种床门槛。公开规则从整地机具挂载、加油和整地开始，
+待适播后换挂播种机具、装种、加油、播种和复查出苗。成熟后以独立收割机
+分批收割，按批次 ID 卸到拖车、烘干湿粮、入库并复查库存。
+Native 黑农58和 WOFOST Soybean_901 代理品种使用同一份 L3 输入声明。
+
+在具名批次场景，`inspect_crop` 从观测到的第一段连续成熟垄推导
+`harvest_batch_limit`，返回当前能容纳的起止垄号和限制原因。空的结束垄号
+表示当前没有可装下的范围。回执提供设备容量和作业范围，不公布作物模型的
+潜在产量。收割前检查收割机剩余空间、单批拖车容量，以及必须烘干的湿粮
+能否装进烘干机。完成时再次检查。容量拒绝不会排程、耗油或改变粮食归属；
+模型可以缩小范围或先卸空收割机。固定批次超重不会因等待解除。
+
+公开进度根据收割、转运、烘干和入库回执更新批次位置及干粮与水的质量。
+同时处理多批时，每批独立记账，重复读取库存不会重复增加入库计数。
+
+```sh
+export PYTHONPATH=experimental
+archive=.runs/historical-era5-openmeteo-1991-2020/archive.json
+for backend in native wofost; do
+  folder=.runs/acps-integrated-reproduction-$backend
+  .venv/bin/python -m evaluate.experiments.historical.cli \
+    build-integrated-season "$archive" "$folder" --backend "$backend"
+  .venv/bin/python -m evaluate.experiments.historical.cli \
+    verify-integrated-season "$archive" "$folder"
+done
+```
+
+每个后端生成母场景、完整轨迹、守恒报告和三个检查点：
+
+| 检查点 | 实际继承状态 |
+| --- | --- |
+| `ready-to-plant` | 种床整好、已挂播种机具，拖拉机的种箱和油箱已补齐。 |
+| `wet-trailer` | 一批有身份的高水分粮食已转到拖车，尚未烘干。 |
+| `partial-warehouse` | 已有八批粮食安全入库，剩余地块尚须收割。 |
+
+独立验证入口重放完整轨迹，读取每个检查点后从原始操作序列重放至该点，
+并从恢复对象继续执行相同后缀。每种续跑的终点指纹都须等于连续运行，
+包括对象位置、物资量、时钟与事件。种子和燃油核对仓库、机载及消耗，
+收储核对回收干粮和粮食水分，烘干除水和电量按回执计入守恒报告。
+
+本轮 L3 声明在两后端逐字节相同，分别完成 64 垄和 16 批烘干入库。
+各耗种 434,240 粒、燃油 121.6 L。Native 入库干粮 9,202.11 kg，烘干
+除水 2,180.40 kg；WOFOST 入库干粮 6,393.08 kg，烘干除水 1,385.74 kg。
+两后端的物资守恒残差均在 `1e-8` 以内。六个检查点均通过独立进程
+恢复、从初始状态重放至检查点，以及续跑至与各自连续运行相同的终态。
+本轮产物位于 `.runs/acps-integrated-7zJB5k`。
+
+### 具名批次容量与真实模型复验
+
+用上轮 WOFOST 首批请求复现容量边界。第 0–7 垄预计形成 1,113.00 kg
+湿粮，超过烘干机 1,000 kg 上限。修复后请求在排程前返回
+`HARVEST_DRYER_CAPACITY_EXCEEDED`，时间、生物和物理状态保持原值。
+`inspect_crop` 给出第 0–6 垄可收。公开进度回归另外从八批已入库的
+检查点恢复，两个后端的摘要均报告八批，且收割机和拖车均为空。
+
+同一历史场景下，真实 `Qwen3.6-35B-A3B-FP8` 在两个后端各自主决策一次。
+
+| 后端 | 播种和收割 | 烘干入库 | 首批湿重 | 工具调用 / 拒绝 |
+| --- | ---: | ---: | ---: | ---: |
+| Native | 64 垄 | 14 批 | 998.77 kg | 189 / 2 |
+| WOFOST | 64 垄 | 10 批 | 973.88 kg | 178 / 2 |
+
+两个模型首批均采用公开范围，整季没有容量超限的收割或烘干请求，也没有
+重复尝试超重批次。Native 的两次拒绝来自播种缺种及追加装种超容量，
+WOFOST 的两次拒绝来自播种缺种和收割机缺油，两者均自行纠正。
+同后端的模型轨迹和脚本基线入库干粮相同。物资守恒通过，入库摘要与账本
+一致，严格回放的终态指纹与真实轨迹完全相同。
+
+真测中断后，从检查点重执行已落盘的模型动作，再由同一模型继续决策。
+回放使用该次运行冻结的源码，并重新执行全部工具请求。全量回归
+421 项通过。本轮产物位于 `.runs/acps-integrated-capacity-z6xg_k_w`。

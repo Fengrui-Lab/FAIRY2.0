@@ -1,5 +1,19 @@
 # Scenario declarations
 
+## 场景库目录
+
+| 目录 | 内容 |
+| --- | --- |
+| `lib/l1`、`lib/l3` | Python 场景声明和共享构建函数 |
+| `lib/l{1,2,3,4}/configs` | 对应级别的场景源 JSON 与区域配置，目前只有 L3 有配置 |
+| `lib/data/weather` | 天气序列和来源记录 |
+| `lib/baselines/l3` | 用于验证场景构建的参考轨迹摘要 |
+| `historical` | 历史场景的源文件加载、天气归档、编译和恢复校验 |
+
+离线运行、对照验收和 L1/L2 切片放在 [experiments](../experiments/README.md)。
+历史场景的冻结输入由 `ScenarioSpec` 校验。源布局调整会改变运行产物的
+源码指纹。旧产物使用生成时的源码快照严格回放。
+
 `spec.py` defines shared ScenarioSpec. `season.py` supplies the initial full-season
 composition: cultivar process parameters, field subdivisions and resource limits.
 These are declarative inputs, not engine objects or mutable environment state.

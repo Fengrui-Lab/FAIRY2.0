@@ -8,22 +8,26 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from hashlib import sha256
 from importlib.metadata import version
+import json
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Sequence
 
 import numpy as np
 import torch
 
-from evaluate.scenarios.historical_scenarios import (
+from evaluate.experiments.historical.operations import (
     TARGET,
     call,
-    compile_season,
-    make_regional_document,
-    make_season_document,
     next_day,
     plant_prefix,
     require,
     window,
+)
+from evaluate.scenarios.historical.compiler import (
+    compile_season,
+    make_regional_document,
+    make_season_document,
 )
 from evaluate.scenarios.season import SeasonSpec
 from fairy.acps.backends.biology.wofost.season import WofostSeasonBackend
@@ -100,9 +104,8 @@ def probes(harbin: JsonObject, changchun: JsonObject) -> list[Probe]:
             if year in (1995, 2002, 2016):
                 cases.append(Probe(spec, year, split, True))
 
-    profile = load_json(
-        Path(__file__).parents[1] / "scenarios/lib/l3/changchun_hn58_2016_profile.json"
-    )
+    profile_path = files("evaluate").joinpath("scenarios/lib/l3/configs/changchun_hn58_2016_profile.json")
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
     if (
         changchun["timezone"] != profile["timezone"]
         or changchun.get("requested_point", changchun["point"])

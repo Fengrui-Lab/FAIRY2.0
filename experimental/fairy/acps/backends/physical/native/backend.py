@@ -18,11 +18,13 @@ from fairy.acps.backends.physical.contracts import (
     CONTAINERS,
 )
 from fairy.acps.ontology.contracts import JsonObject
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import copy
 from math import ceil
 from fairy.acps.backends.physical.contracts import PhysicalCapabilities
 from fairy.acps.ontology.contracts import OperationRejected
+from fairy.acps.ontology.equipment.supply import FUEL_PER_RIDGE, SUPPLY_ACTIONS
+from fairy.acps.backends.physical.native.supply import EquipmentSupply
 
 class NativePhysicalBackend(PhysicalBackend):
     """串行装备作业与唯一物料账本。
@@ -57,6 +59,7 @@ class NativePhysicalBackend(PhysicalBackend):
     def __init__(self, config: SeasonSpec, farm: FarmSpec) -> None:
         """保存显式依赖与初态；模型服务调用发生在决策阶段而非构造阶段。"""
         self.config, self.farm = config, farm
+        self.supply: EquipmentSupply | None = None
         self.state: PhysicalState = dict(
             prepared=[False] * config.ridge_count,
             seeds=config.initial_seed_count,
@@ -75,6 +78,17 @@ class NativePhysicalBackend(PhysicalBackend):
             removed_water_kg=0.0,
             dryer=self._initial_dryer(),
 
+        )
+
+    def enable_supply(self, ids: dict[str, str]) -> None:
+        """Bind the opt-in equipment objects before any operation is accepted."""
+        self.supply = EquipmentSupply(
+            ids, cultivar=self.config.cultivar,
+            seeds_per_ridge=ceil(2 * self.farm.length_m / (self.config.seed_spacing_cm / 100)),
+        )
+        self.capabilities = replace(
+            self.capabilities, version=self.capabilities.version + "+supply1",
+            operations=(*self.capabilities.operations, *sorted(SUPPLY_ACTIONS)),
         )
 
     def _initial_dryer(self) -> DryerState | None:
@@ -108,6 +122,10 @@ class NativePhysicalBackend(PhysicalBackend):
                 raise ValueError("Dryer service cannot complete without a fault")
             dryer["fault_active"] = False
             dryer["repaired"] = True
+
+    def validate_grain_history(self, operations: Iterable[JsonObject]) -> None:
+        """The legacy ledger validates its optional dryer against successful jobs."""
+        self.validate_dryer_history(op["operation"] for op in operations)
 
     def validate_dryer_history(self, operations: Iterable[str]) -> None:
         """Check the equipment lifecycle against successfully completed operations."""
@@ -144,13 +162,43 @@ class NativePhysicalBackend(PhysicalBackend):
             combine_capacity_kg=self.config.combine_capacity_kg,
             trailer_capacity_kg=self.config.trailer_capacity_kg,
             storage_capacity_kg=self.config.storage_capacity_kg,
+            **({"equipment_supply": self.supply.inventory(s)} if self.supply is not None else {}),
         )
+
+    def _combine_load(self) -> GrainBatch:
+        return self.state["combine"]
+
+    def _deposit_harvest(self, batch: GrainBatch, ids: list[int], args: JsonObject) -> JsonObject:
+        for key in COMPONENTS:
+            self.state["combine"][key] += batch[key]
+        return {}
+
+    def _project_recovered_grain(
+        self, biology: SeasonBiologyBackend, ids: list[int]
+    ) -> GrainBatch:
+        gross = biology.project_harvest(ids)
+        recovery = self.config.harvest_recovery_fraction
+        return {"dry_kg": gross["gross_dry_kg"] * recovery,
+                "water_kg": gross["gross_water_kg"] * recovery}
+
+    def _harvest_capacity_error(self, batch: GrainBatch) -> str | None:
+        incoming = self.weight(batch)
+        if incoming <= 0:
+            return "NO_RECOVERABLE_GRAIN"
+        if self.weight(self._combine_load()) + incoming > self.config.combine_capacity_kg + 1e-9:
+            return "COMBINE_CAPACITY_EXCEEDED"
+        return None
 
     def plan(
         self, op: str, args: JsonObject, biology: SeasonBiologyBackend, weather: WeatherDay
     ) -> WorkPlan:
         """Pure preflight. The runtime advances the clock, then rechecks at completion."""
         s, c = self.state, self.config
+        if op in SUPPLY_ACTIONS:
+            if self.supply is None:
+                raise OperationRejected("EQUIPMENT_SUPPLY_UNAVAILABLE")
+            return self.supply.plan(op, args, s)
+        required_seeds = 0
         ids = list(biology.indices(args)) if "start_ridge" in args else []
         n = len(ids)
         duration, fuel = 0.0, 0.0
@@ -160,7 +208,7 @@ class NativePhysicalBackend(PhysicalBackend):
             ):
                 raise OperationRejected("FIELD_NOT_TRAFFICABLE")
             duration = n * {"prepare_seedbed": 0.08, "plant": 0.06, "harvest": 0.10, "replant_gaps": 0.06}[op]
-            fuel = n * {"prepare_seedbed": 0.6, "plant": 0.4, "harvest": 0.9, "replant_gaps": 0.4}[op]
+            fuel = n * FUEL_PER_RIDGE[op]
             if s["fuel_l"] + 1e-9 < fuel:
                 raise OperationRejected("INSUFFICIENT_FUEL")
         if op == "prepare_seedbed":
@@ -176,25 +224,21 @@ class NativePhysicalBackend(PhysicalBackend):
                 raise OperationRejected("RIDGE_ALREADY_PLANTED")
             if any(not s["prepared"][i] for i in ids):
                 raise OperationRejected("SEEDBED_NOT_PREPARED")
-            needed = n * ceil(2 * self.farm.length_m / args["spacing_m"])
-            if needed > s["seeds"]:
+            required_seeds = n * ceil(2 * self.farm.length_m / args["spacing_m"])
+            if required_seeds > s["seeds"]:
                 raise OperationRejected("INSUFFICIENT_SEEDS")
         elif op == "replant_gaps":
             if not isinstance(biology, StandRepairBackend):
                 raise OperationRejected("STAND_REPAIR_UNAVAILABLE")
-            if sum(biology.plan_replant(ids).values()) > s["seeds"]:
+            required_seeds = sum(biology.plan_replant(ids).values())
+            if required_seeds > s["seeds"]:
                 raise OperationRejected("INSUFFICIENT_SEEDS")
         elif op == "harvest":
             if any(not biology.management_state()[i].harvestable for i in ids):
                 raise OperationRejected("CROP_NOT_HARVESTABLE")
-            gross = biology.project_harvest(ids)
-            incoming = (
-                gross["gross_dry_kg"] + gross["gross_water_kg"]
-            ) * c.harvest_recovery_fraction
-            if incoming <= 0:
-                raise OperationRejected("NO_RECOVERABLE_GRAIN")
-            if self.weight(s["combine"]) + incoming > c.combine_capacity_kg + 1e-9:
-                raise OperationRejected("COMBINE_CAPACITY_EXCEEDED")
+            error = self._harvest_capacity_error(self._project_recovered_grain(biology, ids))
+            if error:
+                raise OperationRejected(error)
         elif op == "unload":
             if self.weight(s["combine"]) <= 0:
                 raise OperationRejected("COMBINE_EMPTY")
@@ -254,6 +298,8 @@ class NativePhysicalBackend(PhysicalBackend):
             duration = 0.75
         else:
             raise OperationRejected("UNSUPPORTED_PHYSICAL_OPERATION")
+        if self.supply is not None:
+            self.supply.work_check(op, required_seeds, fuel)
         return dict(duration_hours=duration, fuel_l=fuel)
 
     def execute(
@@ -262,12 +308,15 @@ class NativePhysicalBackend(PhysicalBackend):
         """在完成时复检并提交物理/物料变化；时钟推进和失败回滚归Runtime。"""
         plan = self.plan(op, args, biology, weather)
         s, c = self.state, self.config
+        if op in SUPPLY_ACTIONS:
+            assert self.supply is not None
+            return self.supply.execute(op, args, s)
         ids = list(biology.indices(args)) if "start_ridge" in args else []
         # Preflight tolerates floating-point roundoff at an exhausted budget.
         # Do not persist a tiny negative quantity that restore must then reject.
         s["fuel_l"] = max(0.0, s["fuel_l"] - plan["fuel_l"])
         s["fuel_used_l"] = c.initial_fuel_l - s["fuel_l"]
-        result = {"operation": op, **plan}
+        result: JsonObject = {"operation": op, **plan}
         if op == "prepare_seedbed":
             for i in ids:
                 s["prepared"][i] = True
@@ -292,8 +341,7 @@ class NativePhysicalBackend(PhysicalBackend):
                 "dry_kg": gross["gross_dry_kg"] * c.harvest_recovery_fraction,
                 "water_kg": gross["gross_water_kg"] * c.harvest_recovery_fraction,
             }
-            for key in COMPONENTS:
-                s["combine"][key] += batch[key]
+            result.update(self._deposit_harvest(batch, ids, args))
             s["harvested_dry_kg"] += batch["dry_kg"]
             s["harvested_water_kg"] += batch["water_kg"]
             s["harvest_loss_dry_kg"] += gross["gross_dry_kg"] - batch["dry_kg"]
@@ -340,6 +388,9 @@ class NativePhysicalBackend(PhysicalBackend):
             self._update_dryer(s["dryer"], op)
             if op == "repair_dryer":
                 result["dryer"] = self.dryer_observation()
+        if self.supply is not None and op in FUEL_PER_RIDGE:
+            self.supply.consume(op, result.get("seeds_used", 0), plan["fuel_l"])
+            result["equipment_supply"] = self.supply.inventory(s)
         if ids:
             result["completed_ridges"] = ids
         return result
@@ -347,7 +398,8 @@ class NativePhysicalBackend(PhysicalBackend):
     def export_state(self) -> JsonObject:
         """导出可信恢复快照；此数据不是LLM公开观测。"""
         return dict(
-            schema=2, capabilities=asdict(self.capabilities), state=copy.deepcopy(self.state)
+            schema=2, capabilities=asdict(self.capabilities), state=copy.deepcopy(self.state),
+            **({"equipment_supply": copy.deepcopy(self.supply.state)} if self.supply is not None else {}),
         )
 
     def load_state(self, payload: JsonObject) -> None:
@@ -433,7 +485,43 @@ class NativePhysicalBackend(PhysicalBackend):
                 recovered, (recovered + loss) * c.harvest_recovery_fraction, abs_tol=1e-8
             ):
                 raise ValueError("Harvest recovery disagrees with machinery parameters")
+        if ("equipment_supply" in payload) != (self.supply is not None):
+            raise ValueError("Equipment supply state does not match scenario")
+        if self.supply is not None:
+            self.supply.state = self.supply.decode(payload["equipment_supply"], candidate)
         self.state = candidate
+
+    def validate_supply_history(self, operations: Iterable[JsonObject]) -> None:
+        """Link the restored mount and located stocks to completed work receipts."""
+        if self.supply is None:
+            return
+        supply = copy.deepcopy(self.supply)
+        supply.state = supply.initial_state()
+        totals = copy.deepcopy(self.state)
+        totals["seeds"] = self.config.initial_seed_count
+        totals["fuel_l"] = self.config.initial_fuel_l
+        for job in operations:
+            op, args, receipt = job["operation"], job["arguments"], job["receipt"]
+            try:
+                if op in SUPPLY_ACTIONS:
+                    if supply.execute(op, args, totals) != receipt:
+                        raise ValueError("Transfer receipt disagrees with equipment history")
+                elif op in FUEL_PER_RIDGE:
+                    seeds = receipt.get("seeds_used", 0)
+                    fuel = (args["end_ridge"] - args["start_ridge"] + 1) * FUEL_PER_RIDGE[op]
+                    supply.consume(op, seeds, fuel)
+                    totals["seeds"] -= seeds
+                    totals["fuel_l"] = max(0.0, totals["fuel_l"] - fuel)
+                    if receipt.get("equipment_supply") != supply.inventory(totals):
+                        raise ValueError("Work receipt disagrees with equipment history")
+            except OperationRejected as exc:
+                raise ValueError("Illegal completed equipment supply operation") from exc
+        if (
+            supply.state != self.supply.state
+            or totals["seeds"] != self.state["seeds"]
+            or totals["fuel_l"] != self.state["fuel_l"]
+        ):
+            raise ValueError("Restored equipment stocks disagree with completed operations")
 
     def audit(self) -> JsonObject:
         """返回可信审计投影，用于守恒和恢复检查，不交给普通Agent。"""
@@ -446,6 +534,7 @@ class NativePhysicalBackend(PhysicalBackend):
         )
         return {
             **copy.deepcopy(s),
+            **({"equipment_supply": self.supply.inventory(s)} if self.supply is not None else {}),
             "dry_mass_balance_error_kg": s["harvested_dry_kg"] - dry,
             "water_mass_balance_error_kg": s["harvested_water_kg"] - water - s["removed_water_kg"],
         }

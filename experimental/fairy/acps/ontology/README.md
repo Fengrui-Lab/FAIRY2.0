@@ -16,6 +16,10 @@ Ontology contains domain definitions, passive objects and operation providers. P
 
 ObjectSpec contains an ID, an approved type ID and an optional target link. The pilot explicitly declares its plot and providers targeting that plot. The loader rejects duplicate/reserved IDs, unknown types, missing targets and invalid provider-operation pairs. Passive plots need no callable interface. The single-plot pilot binds each exposed operation to exactly one provider; multiple providers of one public operation need a future explicit routing extension, not a silent overwrite.
 
-Provider contracts belong to their domain directories. Equipment/infra execution is delegated to explicit backends by Runtime. Only the scenario's ordered operation bindings become executable or visible to the model. Runtime-owned `advance_time` is declared in `fairy/events/operations.py`; it has no fabricated agricultural provider. The implementation does not import historical Apps, decorators or scenario scripts.
+每个具体实体在所属领域拥有独立模块，例如 `equipment/tractor.py`、
+`infrastructure/dryer.py` 和 `material/grain.py`。模块收纳实体规格和专属
+操作。共享值类型和跨实体契约放在共享模块。`equipment/operations.py` 汇总
+提供者目录，Runtime 根据场景绑定公开操作，并委托后端执行。仿真时钟操作
+`advance_time` 由 `fairy/events/operations.py` 声明。
 
 Objects do not own the public clock or duplicate backend water/growth state. Sensors read the currently bound backend's public projection; irrigation prepares a receipt while runtime owns budget/pending water settlement; weather reads separate declared public reports. See [runtime loading](../../events/README.md) and [migration audit](../backends/biology/PROCESS_AUDIT.md).

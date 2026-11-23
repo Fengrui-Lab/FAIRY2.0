@@ -1,0 +1,28 @@
+{
+  "format": "fairy.historical_l3.authoring.v1",
+  "identity": {"region": "harbin", "level": "L3", "role": "cold_planting"},
+  "space": {"length_m": 268, "width_m": 70.4},
+  "initial_state": {
+    "date": "1995-05-01",
+    "soil_vwc": 0.3,
+    "crop": {"cultivar": "HEINONG58", "planted": false},
+    "stocks": {"seeds": 1000000, "fuel_l": 190.0}
+  },
+  "objects": {
+    "layout": "grain_and_supply_v1",
+    "grain_storage_capacity_kg": 20000.0
+  },
+  "evolution": {
+    "calendar": {
+      "weather": {
+        "source": "historical_archive",
+        "requested_point": [45.7, 126.6],
+        "timezone": "Asia/Shanghai"
+      },
+      "analysis_windows": [{"start_date": "1995-05-02", "end_date": "1995-05-08"}]
+    },
+    "crop_stage": [],
+    "equipment": []
+  },
+  "task": {"end_date": "1995-10-22", "irrigation_quota_mm": 0}
+}

@@ -43,10 +43,12 @@ def soybean_wofost_calendar_drought() -> ScenarioSpec:
 
 # Reference is generated once via public operations, never during scenario creation.
 from pathlib import Path
+from importlib.resources import files
 import json
 from fairy.events.records import canonical, fingerprint
 
-REFERENCE_PATH = Path(__file__).with_name("wofost_proxy_reference.json")
+REFERENCE_RESOURCE = "lib/baselines/l3/wofost_proxy_reference.json"
+REFERENCE_PATH = Path(__file__).parents[2] / REFERENCE_RESOURCE
 PHASE_ID = "soybean_l3_901_proxy_reproductive_drought_v1"
 
 
@@ -89,7 +91,7 @@ def soybean_wofost_reproductive_drought() -> ScenarioSpec:
     from datetime import date, timedelta
 
     normal = soybean_wofost_normal()
-    reference = json.loads(REFERENCE_PATH.read_text())
+    reference = json.loads(files("evaluate").joinpath("scenarios", REFERENCE_RESOURCE).read_text(encoding="utf-8"))
     if reference["process_identity"] != process_identity() or reference[
         "baseline_fingerprint"
     ] != fingerprint(normal.to_dict()):

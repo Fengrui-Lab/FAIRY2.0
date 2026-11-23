@@ -42,7 +42,7 @@ SIGKILL、掉电和连续中断保存过程不在该保证内；本轮没有声�
 
 `soybean_l3_hn58_waterlimit_v1` 的原始 `weather.json` 没有改动。当前 `soybean_full_season()` 对应 `soybean_l3_hn58_waterlimit_v2`，使用派生的 `weather_v2.json`。
 
-变换固定为7月15—31日降雨设零，其余天气字段保持来源 trace 不变。根据参考播期预先选定日期并冻结，不能随候选策略移动；任务文本没有注入这些日期、隐藏区域或验证干预剂量。来源与派生哈希见 [天气来源记录](../evaluate/scenarios/lib/l3/weather_v2_provenance.json)。
+变换固定为7月15—31日降雨设零，其余天气字段保持来源 trace 不变。根据参考播期预先选定日期并冻结，不能随候选策略移动；任务文本没有注入这些日期、隐藏区域或验证干预剂量。来源与派生哈希见 [天气来源记录](../evaluate/scenarios/lib/data/weather/weather_v2_provenance.json)。
 
 离线验证通过公共操作整田建植，在固定日期给22—43垄一次固定灌溉，累计使用4 mm全田等效配额；对照不灌溉。两者使用同一场景规格，不是针对处理组另换天气。
 

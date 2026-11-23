@@ -32,6 +32,11 @@ def _agent_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--max-protocol-errors", type=int, default=3)
     command.add_argument("--history-turns", type=int, default=None)
     command.add_argument("--context-chars", type=int, default=60000)
+    command.add_argument(
+        "--fixed-irrigation-dose-mm",
+        type=float,
+        help="WOFOST soybean LLM integration control: request a target; a fixed policy supplies the dose",
+    )
 
 
 @contextmanager
@@ -64,6 +69,32 @@ def execute(args: argparse.Namespace, progress_path: Path) -> int:
             raise ValueError("Cannot resume a terminated run")
     else:
         runtime = Runtime(SCENARIOS[args.scenario](), args.backend)
+    previous = source_record.get("agent", {}) if args.command == "resume" else {}
+    prior_dosing = previous.get("irrigation_dosing")
+    irrigation_dosing = None
+    if args.fixed_irrigation_dose_mm is not None:
+        from fairy.agents.loop.context.water import soil_profile
+        from fairy.agents.loop.controller.irrigation_dose import IrrigationDosing
+        from fairy.agents.models.numeric.dose import FixedIrrigationDose
+
+        season = runtime.scenario.season
+        if (
+            args.agent != "llm"
+            or runtime.backend_name != "wofost"
+            or season is None
+            or season.cultivar != "Soybean_901_proxy"
+            or "irrigate_range" not in runtime.scenario.tools
+        ):
+            raise ValueError("Fixed dosing requires a WOFOST Soybean_901 full-season LLM run")
+        policy = FixedIrrigationDose(args.fixed_irrigation_dose_mm)
+        irrigation_dosing = IrrigationDosing(policy, soil_profile(runtime.scenario))
+        if prior_dosing is not None:
+            if prior_dosing["policy"] != policy.identity:
+                raise ValueError("Resume the run with the same dose policy")
+            irrigation_dosing.attempts.extend(prior_dosing["attempts"])
+            irrigation_dosing.feedback = prior_dosing.get("feedback")
+    elif prior_dosing is not None:
+        raise ValueError("Resume this run with its original --fixed-irrigation-dose-mm")
     agent: PublicAgent | PrivilegedAgent
     if args.agent == "oracle":
         agent = oracle_for(runtime.scenario)
@@ -81,7 +112,6 @@ def execute(args: argparse.Namespace, progress_path: Path) -> int:
     if args.command == "resume":
         from fairy.events.records import fingerprint
 
-        previous = source_record.get("agent", {})
         prior = previous.get("prior_usage", {})
         agent.metadata.update(
             resume={
@@ -128,6 +158,7 @@ def execute(args: argparse.Namespace, progress_path: Path) -> int:
             max_context_chars=args.context_chars,
             on_step=progress,
             wall_timeout=args.wall_timeout,
+            irrigation_dosing=irrigation_dosing,
             max_history_turns=(
                 args.history_turns
                 if args.history_turns is not None

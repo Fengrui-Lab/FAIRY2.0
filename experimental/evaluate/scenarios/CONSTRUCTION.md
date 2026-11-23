@@ -83,7 +83,7 @@ WOFOST全季仍明确不支持，原Native/WOFOST的L1能力保持，不静默�
 在仓库根运行，输出目录必须尚不存在：
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.lib.l3.normal_validation --out .runs/normal-suite-new
+.venv/bin/python -m evaluate.experiments.validation.normal --out .runs/normal-suite-new
 .venv/bin/python -m interface.cli run --scenario soybean_l3_hn58_normal_v1
 .venv/bin/python -m interface.cli run --scenario soybean_l3_hn58_drought_r1_r5_v1
 .venv/bin/python -m pytest -q --disable-warnings
@@ -100,7 +100,7 @@ WOFOST全季仍明确不支持，原Native/WOFOST的L1能力保持，不静默�
 维护者显式重建命令（有意替换包内参考文件，不是普通运行步骤）：
 
 ```bash
-.venv/bin/python -m evaluate.scenarios.lib.l3.normal_validation --build-reference
+.venv/bin/python -m evaluate.experiments.validation.normal --build-reference
 ```
 
 参考Office的共享执行内核、声明式目录及未来/已发生事件分离，未导入其App或静态Oracle DAG。

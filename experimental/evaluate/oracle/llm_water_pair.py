@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Sequence, cast
 
 from evaluate.oracle.stress_supervision import Probe, probes
-from evaluate.scenarios.historical_scenarios import (
+from evaluate.experiments.historical.operations import (
     TARGET,
     call,
     close_harvest,
