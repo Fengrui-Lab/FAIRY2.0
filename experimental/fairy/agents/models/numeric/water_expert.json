@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "reference_et0_mm": 4.0,
+  "intercept": 0.9968386877822012,
+  "slope": -3.7589387000352703,
+  "cultivar": "Soybean_901",
+  "input_dataset_sha256": "ece8894e9cb49b471c5ba049f1dbedceca1deda94a626bf0b00b9f43e71f1d4f"
+}

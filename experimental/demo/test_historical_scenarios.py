@@ -646,3 +646,123 @@ def test_wofost_seedbed_uses_settled_weather_and_restores(archive):
         assert after["settled"]
         assert after["observations"][0]["seedbed_temperature_c"] == round(expected, 2)
     assert_equivalent(run.export_state(), restored.export_state())
+
+
+def test_wofost_current_water_reaches_llm_payload_after_settlement_and_restore(archive):
+    pytest.importorskip("pcse")
+    import json
+    from types import SimpleNamespace as NS
+
+    from evaluate.scenarios.historical_scenarios import plant_prefix
+    from fairy.agents.loop.context.history import public_history
+    from fairy.agents.loop.context.public import build_context
+    from fairy.agents.loop.controller.run import run_agent
+    from fairy.agents.models.llm.adapter import LLMAdapter
+
+    spec = compile_season(
+        make_season_document(archive, 2000, "drought"), archive, backend="wofost"
+    )
+    runtime = plant_prefix(spec, backend="wofost")
+    zone = {"start_ridge": 22, "end_ridge": 43}
+    for _ in range(35):
+        crop = require(call(runtime, "inspect_crop", **zone))["receipt"]["observations"]
+        if all(row["phase"] == "vegetative" for row in crop):
+            break
+        next_day(runtime)
+    else:
+        pytest.fail("WOFOST did not emerge")
+
+    def diagnose():
+        return build_context(
+            runtime, public_history(runtime), max_chars=12000, max_turns=1
+        )["water_diagnostics"]["zones"][0]
+
+    require(call(runtime, "observe_soil_range", **zone))
+    before = diagnose()
+    assert before["current_root_water"]["status"] == "observed"
+    assert before["yesterday_stress"] is None
+    assert before["crop_water_expert"]["status"] == "estimated"
+    require(
+        call(runtime, "irrigate_range", start_ridge=22, end_ridge=32, depth_mm=10.0)
+    )
+    assert not call(
+        runtime, "irrigate_range", start_ridge=0, end_ridge=63, depth_mm=50.0
+    ).ok
+    pending = diagnose()
+    assert pending["current_root_water"] == before["current_root_water"]
+    assert pending["crop_water_expert"] == before["crop_water_expert"]
+    assert pending["irrigation"]["pending_zone_mean_mm"] == 5.0
+    assert pending["irrigation"]["pending_ridges"] == 11
+
+    settled_day = runtime.now.date().isoformat()
+    next_day(runtime)
+    require(call(runtime, "get_current_weather"))
+    stale = diagnose()
+    assert stale["current_root_water"]["status"] == "needs_fresh_soil_observation"
+    assert "state" not in stale["current_root_water"]
+    assert stale["irrigation"]["last_local_midnight_settled_zone_mean_mm"] == 5.0
+    assert stale["irrigation"]["pending_zone_mean_mm"] == 0.0
+    assert stale["yesterday_stress"]["day"] == settled_day
+    backend = runtime.season_backend
+    truth = [1.0 - backend.engines[i].last_water_stress.rfws for i in range(22, 44)]
+    assert stale["yesterday_stress"]["severity"] == pytest.approx(
+        sum(truth) / 22, abs=0.01
+    )
+
+    require(call(runtime, "observe_soil_range", **zone))
+    refreshed = diagnose()
+    assert refreshed["current_root_water"]["status"] == "observed"
+    assert refreshed["yesterday_stress"] == stale["yesterday_stress"]
+    assert (
+        refreshed["crop_water_expert"]["status"]
+        == "needs_current_living_crop_observation"
+    )
+    require(call(runtime, "inspect_crop", **zone))
+    assert diagnose()["crop_water_expert"]["status"] == "estimated"
+    first_today = diagnose()["crop_water_expert"]["soil_observed_at"]
+    require(call(runtime, "advance_time", hours=0.25))
+    require(call(runtime, "observe_soil_range", **zone))
+    assert diagnose()["crop_water_expert"]["soil_observed_at"] == first_today
+    refreshed = diagnose()
+    restored = Runtime.from_state(runtime.export_state())
+    payloads = []
+
+    def create(**kwargs):
+        payloads.append(kwargs["messages"])
+        return NS(
+            usage=None,
+            choices=[
+                NS(finish_reason="stop", message=NS(content="done", tool_calls=[]))
+            ],
+        )
+
+    model = LLMAdapter(
+        model="offline-water-test", client=NS(chat=NS(completions=NS(create=create)))
+    )
+    run_agent(restored, model, max_steps=1, max_history_turns=1)
+    diagnostics = json.loads(payloads[0][1]["content"])["water_diagnostics"]
+    compact = diagnostics["zones"][0]
+    assert compact["current_crop_water"] == refreshed["crop_water_expert"]
+    assert compact["irrigation"] == {
+        "pending": "none",
+        "settled_last_midnight": "partial",
+    }
+    assert compact["yesterday_water_stress"]["day"] == settled_day
+    assert "unavailable" in diagnostics["nitrogen"]
+    serialized = json.dumps(payloads[0])
+    assert "reference_available_fraction" not in serialized
+    assert "root_vwc" not in serialized
+    assert "available_fraction" not in serialized
+    assert "Soil observation recorded" in serialized
+    assert "root_vwc" in json.dumps(public_history(runtime))
+
+    from fairy.events.artifacts import artifact, replay
+
+    replayed, metrics = replay(artifact(runtime))
+    assert metrics["replay_verified"] is True
+    assert (
+        build_context(replayed, public_history(replayed), max_turns=1)[
+            "water_diagnostics"
+        ]["zones"][0]
+        == refreshed
+    )

@@ -104,3 +104,64 @@ def test_stress_scores_validate_one_prediction_per_evaluation_label():
     }
     with pytest.raises(ValueError, match="paired"):
         scores(np.array([0.5]), np.array([0.5, 0.3]))
+
+
+def test_analytical_stress_clips_per_ridge_before_averaging():
+    pytest.importorskip("pcse")
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from evaluate.oracle.stress_ablation import analytical, diagnostics
+    import numpy as np
+
+    # One ridge at wilting point and one above field capacity.
+    args = (6.0, 0.10, 0.30, 1.0, 5.0)
+    assert analytical((0.10, 0.31), *args) == pytest.approx(0.50)
+    assert analytical((0.31,), *args) == 0.0
+    assert analytical((0.10,), *args) == 1.0
+    report = diagnostics(np.array([0.20, 0.11, 0.0]), np.array([0.05, 0.05, 0.12]))
+    assert report["confusion"]["fn"] == 2
+    assert report["severe_false_negatives"] == 1
+
+
+def test_water_priority_preserves_strict_order_and_reports_uncertainty():
+    from fairy.agents.loop.context.water import relative_water_stress
+
+    lighter = {"ridge_range": [0, 21], "crop_water_score_interval": [0.24, 0.25]}
+    heavier = {"ridge_range": [22, 43], "crop_water_score_interval": [0.35, 0.36]}
+    stale = {"ridge_range": [44, 63], "crop_water_score_interval": None}
+    assert relative_water_stress([lighter, heavier, stale]) == {
+        "higher_stress_first": [[[22, 43], [0, 21]]],
+        "indistinguishable": [],
+    }
+    near = {**heavier, "crop_water_score_interval": [0.24, 0.26]}
+    assert relative_water_stress([lighter, near]) == {
+        "higher_stress_first": [],
+        "indistinguishable": [[[0, 21], [22, 43]]],
+    }
+
+
+def test_redundant_soil_reads_reset_at_local_midnight():
+    pytest.importorskip("torch")
+    pytest.importorskip("sb3_contrib")
+    from evaluate.oracle.llm_water_pair import repeated_observations
+
+    def soil(seq, day, ridges):
+        return {
+            "event_seq": seq,
+            "time": f"2007-07-{day:02}T07:00:00+08:00",
+            "request": {"tool": "observe_soil_range"},
+            "result": {
+                "ok": True,
+                "data": {
+                    "receipt": {
+                        "observations": [{"ridge_id": ridge} for ridge in ridges]
+                    }
+                },
+            },
+        }
+
+    history = [soil(1, 1, (0, 1)), soil(2, 1, (0,)), soil(3, 2, (0, 1))]
+    assert repeated_observations(history, 1) == {
+        "observe_soil_range": 1,
+        "inspect_crop": 0,
+    }

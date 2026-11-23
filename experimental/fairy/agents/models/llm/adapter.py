@@ -57,6 +57,16 @@ class ChatClient(Protocol):
     chat: ChatEndpoint
 
 
+DAILY_OBSERVATION_GUIDANCE = (
+    " Farm operations can run within a day; crop growth and routine soil-water balance "
+    "update at local midnight. Reuse a successful same-day reading for the same ridges "
+    "unless a completed operation changes the observed state. Accepted irrigation remains "
+    "pending until midnight; repeating a same-day soil reading will not show its effect. "
+    "After midnight, obtain a fresh reading if your next water decision depends on current "
+    "soil conditions. Equipment, inventory and work status can change within the day."
+)
+
+
 class LLMAdapter:
     """OpenAI兼容工具调用适配器。
 
@@ -77,6 +87,8 @@ class LLMAdapter:
         thinking: bool | None = None,
         timeout: float = 30.0,
         temperature: float = 0.1,
+        daily_observation_guidance: bool = True,
+        rank_water_diagnostics: bool = True,
     ) -> None:
         """保存显式依赖与初态；模型服务调用发生在决策阶段而非构造阶段。"""
         if type(max_output_tokens) is not int or max_output_tokens < 1:
@@ -88,6 +100,8 @@ class LLMAdapter:
         if thinking is not None and type(thinking) is not bool:
             raise ValueError("thinking must be a boolean or None")
         self.temperature = temperature
+        self.daily_observation_guidance = daily_observation_guidance
+        self.rank_water_diagnostics = rank_water_diagnostics
         self.max_output_tokens = max_output_tokens
         self.thinking = thinking
         self.model = model or os.getenv("FAIRY_LLM_MODEL")
@@ -138,6 +152,10 @@ class LLMAdapter:
         # Rebuild the bounded conversation from public observations only.
         # Never include raw exceptions, audit data, credentials or restore packages.
         """以有限公开历史构造工具调用请求，验证服务响应并返回Decision；绝不执行文本伪工具。"""
+        if "water_diagnostics" in context:
+            from fairy.agents.loop.context.water import llm_expert_context
+
+            context = llm_expert_context(context, rank=self.rank_water_diagnostics)
         options = {}
         if self.thinking is not None:
             options["extra_body"] = {"chat_template_kwargs": {"enable_thinking": self.thinking}}
@@ -158,6 +176,8 @@ class LLMAdapter:
                 ),
             },
         ]
+        if self.daily_observation_guidance:
+            messages[0]["content"] += DAILY_OBSERVATION_GUIDANCE
         # Reconstruct only the bounded public request/result pairs, not chain of
         # thought. Valid role/tool_call_id linkage matters to tool-trained models.
         for index, turn in enumerate(context.get("history", ())):

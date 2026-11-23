@@ -31,6 +31,7 @@ class PublicContext(_RequiredContext, total=False):
     weather: list[JsonObject]
     protocol_feedback: JsonObject
     oracle_guidance: JsonObject
+    water_diagnostics: JsonObject
 
 
 from fairy.events.records import detached, canonical
@@ -175,6 +176,16 @@ def build_context(
         "history_kept": len(context["history"]),
         "history_omitted": 0,
     }
+    if spec.season and spec.season.cultivar == "Soybean_901_proxy" and runtime.backend_name == "wofost":
+        from fairy.agents.loop.context.water import current_water_context
+
+        rows = current_water_context(spec, history, runtime.now)
+        if rows:
+            context["water_diagnostics"] = {
+                "source": "public observations, accepted irrigation receipts, declared soil",
+                "scope": "current root-water availability and separately dated past stress; no irrigation recommendation",
+                "zones": rows,
+            }
     context["public_memory"] = public_memory(history, context["history"])
     while True:
         # Counts are part of the budget, including when their digit lengths change.
@@ -193,6 +204,11 @@ def build_context(
         elif context["public_memory"]["unresolved_rejections"]:
             context["public_memory"]["unresolved_rejections"].pop(0)
             context["public_memory"]["omitted_rejections"] += 1
+        elif "water_diagnostics" in context:
+            zones = context["water_diagnostics"]["zones"]
+            zones.pop()
+            if not zones:
+                context.pop("water_diagnostics")
         else:
             raise ValueError("Public task context exceeds character budget")
     return detached(context)

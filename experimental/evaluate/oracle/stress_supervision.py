@@ -69,6 +69,15 @@ class Probe:
 
 
 @dataclass(frozen=True)
+class AlignedDay:
+    """Observations and accepted water for a single PCSE rate day."""
+
+    start_vwc: tuple[float, ...]
+    et0_mm: float
+    irrigation_mm: float
+
+
+@dataclass(frozen=True)
 class Sample:
     """One public seven-day window paired with a trusted day-end PCSE label."""
 
@@ -76,6 +85,7 @@ class Sample:
     region: tuple[int, int]
     features: list[tuple[float, ...]]
     severity: float
+    aligned: tuple[AlignedDay, ...]
 
 
 def probes(harbin: JsonObject, changchun: JsonObject) -> list[Probe]:
@@ -126,21 +136,30 @@ def collect(probe: Probe) -> list[Sample]:
     histories: dict[tuple[int, int], list[StressObservation]] = {
         zone: [] for zone in REGIONS
     }
+    aligned: dict[tuple[int, int], list[AlignedDay]] = {zone: [] for zone in REGIONS}
+    previous_soil: dict[tuple[int, int], tuple[float, ...]] = {}
+    previous_irrigation = dict.fromkeys(REGIONS, 0.0)
     samples = []
     doses = 0
     while runtime.now.date() < runtime.deadline.date():
         stopped = []
+        irrigation = dict.fromkeys(REGIONS, 0.0)
         for zone, history in histories.items():
             crop = require(call(runtime, "inspect_crop", **window(zone)))["receipt"]
             stopped.append(all(row["harvestable"] for row in crop["observations"]))
-            phases = {row["phase"] for row in crop["observations"]}
-            if len(phases) != 1 or not phases <= {"vegetative", "reproductive"}:
-                history.clear()
-                continue
-
             soil = require(call(runtime, "observe_soil_range", **window(zone)))[
                 "receipt"
             ]
+            start_vwc = previous_soil.get(zone)
+            previous_soil[zone] = tuple(row["root_vwc"] for row in soil["observations"])
+            phases = {row["phase"] for row in crop["observations"]}
+            if len(phases) != 1 or not phases <= {"vegetative", "reproductive"}:
+                history.clear()
+                aligned[zone].clear()
+                continue
+
+            if start_vwc is None:
+                raise ValueError("Living crop lacks a start-of-day soil observation")
             weather = require(call(runtime, "get_current_weather"))
             reading = StressObservation.from_public(soil, crop, weather)
             day = reading.day.isoformat()
@@ -151,15 +170,29 @@ def collect(probe: Probe) -> list[Sample]:
             if any(item is not None and item.day != day for item in diagnostics):
                 raise ValueError("PCSE label date and public weather day do not match")
             history.append(reading)
+            aligned[zone].append(
+                AlignedDay(
+                    start_vwc, weather["weather"]["et0_mm"], previous_irrigation[zone]
+                )
+            )
             if len(history) > WINDOW_DAYS:
                 del history[0]
+                del aligned[zone][0]
             if len(history) == WINDOW_DAYS and all(
                 item is not None for item in diagnostics
             ):
                 severity = sum(
                     1.0 - item.rfws for item in diagnostics if item is not None
                 ) / len(diagnostics)
-                samples.append(Sample(day, zone, window_features(history), severity))
+                samples.append(
+                    Sample(
+                        day,
+                        zone,
+                        window_features(history),
+                        severity,
+                        tuple(aligned[zone]),
+                    )
+                )
             if (
                 zone == TARGET
                 and probe.irrigated
@@ -167,11 +200,17 @@ def collect(probe: Probe) -> list[Sample]:
                 and phases == {"reproductive"}
                 and reading.features[0] < 0.18
             ):
-                require(call(runtime, "irrigate_range", **window(zone), depth_mm=10.0))
+                receipt = require(
+                    call(runtime, "irrigate_range", **window(zone), depth_mm=10.0)
+                )["receipt"]
+                if receipt["settlement"] != "next_local_midnight":
+                    raise ValueError("Unexpected irrigation settlement contract")
+                irrigation[zone] = receipt["depth_mm"]
                 doses += 1
         if all(stopped):
             break
         next_day(runtime)
+        previous_irrigation = irrigation
     else:
         raise ValueError(
             f"Did not reach mature crop in both probe zones: {probe.identity}"
@@ -215,7 +254,7 @@ def fit(
     tensor = torch.from_numpy((x - mean) / scale)
     target = torch.from_numpy(labels)
     train_x, train_y = tensor[train], target[train]
-    model = SoilWaterStressRegressor(len(FEATURES))
+    model = SoilWaterStressRegressor(inputs.shape[-1])
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.003)
     best_loss = float("inf")
     best = {}
@@ -244,6 +283,21 @@ def fit(
     return model, mean, scale, predicted, best_epoch
 
 
+def collect_probes(cases: Sequence[Probe], workers: int) -> list[list[Sample]]:
+    """Spawn isolated PCSE runtimes without forking the torch runtime."""
+    from multiprocessing import get_context
+
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=get_context("spawn")
+    ) as pool:
+        collected = []
+        for case, batch in zip(cases, pool.map(collect, cases), strict=True):
+            collected.append(batch)
+            print(f"{case.identity} {case.split}: {len(batch)} windows", flush=True)
+
+    return collected
+
+
 def run_experiment(
     harbin: JsonObject, changchun: JsonObject, out: Path, *, seed: int, workers: int
 ) -> JsonObject:
@@ -256,16 +310,7 @@ def run_experiment(
         raise ValueError("A weather year appears in multiple partitions")
     out.mkdir(parents=True, exist_ok=False)
 
-    # Spawn independent simulators without forking the torch runtime.
-    from multiprocessing import get_context
-
-    with ProcessPoolExecutor(
-        max_workers=workers, mp_context=get_context("spawn")
-    ) as pool:
-        collected = []
-        for case, batch in zip(cases, pool.map(collect, cases), strict=True):
-            collected.append(batch)
-            print(f"{case.identity} {case.split}: {len(batch)} windows", flush=True)
+    collected = collect_probes(cases, workers)
 
     samples = [row for batch in collected for row in batch]
     x = np.array([row.features for row in samples], dtype=np.float32)
